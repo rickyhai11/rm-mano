@@ -1,0 +1,257 @@
+import MySQLdb as rmdb
+import json
+import sys
+from threading import Thread
+data = {'reservation_id': '12345',
+        'label': 'test1',
+        'host': "hai_compute",
+        'user': 'ricky',
+        'project': 'admin',
+        'start_time': '2016-04-13 12:19:20',
+        'end_time': '2016-04-13 12:30:20',
+        'flavor_id': '1',
+        'summary': 'reservation testing',
+        'status': 'created'
+        }
+'''
+Should consider to user array for status field
+'''
+class resource_db():
+    def __init__(self):
+        #initialization
+        return
+    def connect_db(self, host=None, user=None, passwd=None, database=None):
+        '''
+        :param host:
+        :param user:
+        :param passwd:
+        :param database:
+        :return:
+        Connect to specific database. valid host, user, passwd and database must be provided
+        '''
+        try:
+            if host is not None: self.host = host
+            if user is not None: self.user = user
+            if passwd is not None: self.passwd = passwd
+            if database is not None: self.database = database
+
+            self.con =rmdb.connect(self.host, self.user, self.passwd, self.database)
+            print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
+            return 0
+        except rmdb.Error, e:
+            print "cannot connect to %s@%s ---> %s Error %d:%s" % (self.user, self.host, self.database, e.args[0],
+                                                                   e.args[1])
+            return -1
+
+    def disconnect(self):
+        '''disconnect from specific data base'''
+        try:
+            self.con.close()
+            del self.con
+        except rmdb.Error, e:
+            print "Error disconnecting from DB: Error %d: %s" % (e.args[0], e.args[1])
+            return -1
+        except AttributeError, e: #self.con not defined
+            if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
+            else: raise
+
+    def add_row_rsv(self, cursor, table_name, rowdict):
+        '''
+        Add a new reservation to reservation table
+        input parameters:
+        cursor from rm_db object
+        table_name: name of table in mySQL DB
+        rowdict: dictionary for reservation attributes as below structure
+            data = {'reservation_id': '12345',
+            'label': 'test1',
+            'host': "hai_compute",
+            'user': 'ricky',
+            'project': 'admin',
+            'start_time': '2016-04-13 12:19:20',
+            'end_time': '2016-04-13 12:30:20',
+            'flavor_id': '1',
+            'summary': 'reservation testing',
+            'status': 'created'
+            }
+            XXX tablename not sanitized
+            XXX test for allowed keys is case-sensitive
+            filter out keys that are not column names'''
+
+        #self.con
+        self.cursor=self.con.cursor()
+        self.cursor.execute("describe %s" % table_name)
+        self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
+        print self.allowed_keys
+        self.keys = self.allowed_keys.intersection(rowdict)
+        #print "print keys"
+        #print self.keys
+
+        if len(rowdict) > len(self.keys):
+            unknown_keys = set(rowdict) - self.allowed_keys
+            print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
+
+        columns = ", ".join(self.keys)
+        values_template = ", ".join(["%s"] * len(self.keys))
+        try:
+            sql = "insert into %s (%s) values (%s)" % (
+                table_name, columns, values_template)
+            values = tuple(rowdict[key] for key in self.keys)
+            #print sql
+            #print values
+            self.cursor.execute(sql, values)
+            self.con.commit()
+            print "insert successfully"
+        except:
+            self.con.rollback()
+
+
+    def delete_row_rsv(self,table_name, reservation_id):
+        '''
+        Delete a reservation from database with reservation ID from reservation table
+        :param table:
+        :return:
+        '''
+        # for retry_ in range(0,2):
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "DELETE FROM %s WHERE reservation_id = '%s'" % (table_name, reservation_id)
+                print sql
+                self.cur.execute(sql)
+                deleted = self.cur.rowcount
+                print "Delete successfully a reservation: %s " % deleted
+            return deleted
+        except (rmdb.Error, AttributeError), e:
+                print "resource_db.delete_row DB Exception %d : %s" % (e.argrs[0], e.args[1])
+
+    def update_row_rsv(self, table_name, reservation_id, start_time, end_time):
+        '''
+        update start_time and end_time of a reservation from reservation table
+        :param self:
+        :param reservation_id:
+        :param start_time:
+        :param end_time:
+        :return:
+        '''
+
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "UPDATE %s SET start_time='%s',end_time='%s' WHERE reservation_id = '%s'" % (table_name,
+                                                                            start_time, end_time, reservation_id)
+                print sql
+                self.cur.execute(sql)
+                updated = self.cur.rowcount
+                print "Update successfully a reservation: %s " % updated
+            return updated
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
+
+    def get_rsv_id(self, table_name, reservation_id):
+        '''
+        this function is to list a reservation from DB table with reservation_id
+        :param table_name:
+        :param reservation_id:
+        :return:
+        '''
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql= "SELECT * FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
+                self.cur.execute(sql)
+                rows=self.cur.fetchall()
+                listed= self.cur.rowcount
+                print "list a reservation with id %s successfully" %reservation_id
+                print listed
+                print rows
+                return listed, rows
+        except(rmdb.Error, AttributeError), e:
+            print "resource_db.get_rsv_id DB exception %d: %s" % (e.args[0], e.args[1])
+
+
+    def __str2db_format(self, data):
+        '''Convert string data to database format.
+        If data is None it returns the 'Null' text,
+        otherwise it returns the text surrounded by quotes ensuring internal quotes are escaped.
+        '''
+        if data==None:
+            return 'Null'
+        out=str(data)
+        if "'" not in out:
+            return "'" + out + "'"
+        elif '"' not in out:
+            return '"' + out + '"'
+        else:
+            return json.dumps(out)
+
+    def __tuple2db_format_set(self, data):
+        '''Compose the needed text for a SQL SET, parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A="B"', where A is a field of a table and B is the value
+        If B is None it returns the 'A=Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A='B'" or 'A="B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + "=Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "='" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '="' + out + '"'
+        else:
+            return str(data[0]) + '=' + json.dumps(out)
+
+    def __tuple2db_format_where(self, data):
+        '''Compose the needed text for a SQL WHERE, parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A="B"', where A is a field of a table and B is the value
+        If B is None it returns the 'A is Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A='B'" or 'A="B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + " is Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "='" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '="' + out + '"'
+        else:
+            return str(data[0]) + '=' + json.dumps(out)
+
+    def __tuple2db_format_where_not(self, data):
+        '''Compose the needed text for a SQL WHERE(not). parameter 'data' is a pair tuple (A,B),
+        and it returns the text 'A<>"B"', where A is a field of a table and B is the value
+        If B is None it returns the 'A is not Null' text, without surrounding Null by quotes
+        If B is not None it returns the text "A<>'B'" or 'A<>"B"' where B is surrounded by quotes,
+        and it ensures internal quotes of B are escaped.
+        '''
+        if data[1]==None:
+            return str(data[0]) + " is not Null"
+        out=str(data[1])
+        if "'" not in out:
+            return str(data[0]) + "<>'" + out + "'"
+        elif '"' not in out:
+            return str(data[0]) + '<>"' + out + '"'
+        else:
+            return str(data[0]) + '<>' + json.dumps(out)
+
+    def __remove_quotes(self, data):
+        '''remove single quotes ' of any string content of data dictionary'''
+        for k,v in data.items():
+            if type(v) == str:
+                if "'" in v:
+                    data[k] = data[k].replace("'","_")
+
+
+if __name__ == '__main__':
+    # INSERT= {"mem_total": 10, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_availble": 7}
+    db = resource_db()
+    a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+    table_name = 'reservation'
+    cursor=db.con.cursor()
+    # print data.keys()
+    # print data.values()
+    #db.add_row_rsv(cursor, table_name, data)
+    #db.delete_row_rsv(table_name,'12345')
+    db.update_row_rsv(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
+    db.get_rsv_id(table_name,'12345')
