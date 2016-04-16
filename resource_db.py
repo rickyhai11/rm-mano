@@ -1,6 +1,7 @@
 import MySQLdb as rmdb
 import json
 import sys
+from sh_layer import sh_compute_capacity_poll as sh_compute
 from threading import Thread
 data = {'reservation_id': '12345',
         'label': 'test1',
@@ -16,6 +17,12 @@ data = {'reservation_id': '12345',
 '''
 Should consider to user array for status field
 '''
+
+vmem_capa= {'uuid': 3,"mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
+
+vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
+            #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
+
 class resource_db():
     def __init__(self):
         #initialization
@@ -55,27 +62,28 @@ class resource_db():
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
 
-    def add_row_rsv(self, cursor, table_name, rowdict):
-        '''
-        Add a new reservation to reservation table
-        input parameters:
-        cursor from rm_db object
-        table_name: name of table in mySQL DB
-        rowdict: dictionary for reservation attributes as below structure
-            data = {'reservation_id': '12345',
-            'label': 'test1',
-            'host': "hai_compute",
-            'user': 'ricky',
-            'project': 'admin',
-            'start_time': '2016-04-13 12:19:20',
-            'end_time': '2016-04-13 12:30:20',
-            'flavor_id': '1',
-            'summary': 'reservation testing',
-            'status': 'created'
-            }
-            XXX tablename not sanitized
-            XXX test for allowed keys is case-sensitive
-            filter out keys that are not column names'''
+    def add_row_rs(self, table_name, rowdict):
+        ''' add_row_ resources could be used like global adding function for adding any data with dict/json format to DB
+        for instance:
+            if Add a new reservation to reservation table
+            input parameters:
+            cursor from rm_db object
+            table_name: name of table in mySQL DB
+            rowdict: dictionary for reservation attributes as below structure
+                data = {'reservation_id': '12345',
+                'label': 'test1',
+                'host': "hai_compute",
+                'user': 'ricky',
+                'project': 'admin',
+                'start_time': '2016-04-13 12:19:20',
+                'end_time': '2016-04-13 12:30:20',
+                'flavor_id': '1',
+                'summary': 'reservation testing',
+                'status': 'created'
+                }
+                XXX tablename not sanitized
+                XXX test for allowed keys is case-sensitive
+                filter out keys that are not column names'''
 
         #self.con
         self.cursor=self.con.cursor()
@@ -96,12 +104,13 @@ class resource_db():
             sql = "insert into %s (%s) values (%s)" % (
                 table_name, columns, values_template)
             values = tuple(rowdict[key] for key in self.keys)
-            #print sql
-            #print values
+            print sql
+            print values
             self.cursor.execute(sql, values)
             self.con.commit()
             print "insert successfully"
-        except:
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.add_row DB Exception %d : %s" % (e.args[0], e.args[1])
             self.con.rollback()
 
 
@@ -124,7 +133,7 @@ class resource_db():
         except (rmdb.Error, AttributeError), e:
                 print "resource_db.delete_row DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
-    def update_row_rsv(self, table_name, reservation_id, start_time, end_time):
+    def update_row_rsv_timestamp(self, table_name, reservation_id, start_time, end_time):
         '''
         update start_time and end_time of a reservation from reservation table
         :param self:
@@ -167,6 +176,39 @@ class resource_db():
                 return listed, rows
         except(rmdb.Error, AttributeError), e:
             print "resource_db.get_rsv_id DB exception %d: %s" % (e.args[0], e.args[1])
+
+    def update_row_capacity(self, table_name, uuid, new_values_dict):
+        '''
+        Removes the old (based on uuid) and adds the new values for resource capacity tables (vcpu, vmem,vdisk, network etc...)
+        Attribute
+        :param table_name: table where to insert
+        :param uuid: input uuid that using to del
+        :param new_values_dict:
+        :return: (delete, new_uuid)
+        '''
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "DELETE FROM %s WHERE uuid= '%s'" % (table_name, uuid)
+                print sql
+                self.cur.execute(sql)
+                deleted = self.cur.rowcount
+                #print deleted
+                if deleted > 0 and new_values_dict:
+                    print "delete successfully next step --> adding new values"
+                    self.add_row_rs(table_name, new_values_dict)
+                    print "Update new values for table %s successfully" % table_name
+                    new_uuid = new_values_dict['uuid']
+
+                    return deleted, new_uuid
+
+                else:
+                    print "failed to delete previous values in db ######'%s row has been deleted'###### OR " \
+                          "###### 'uuid': %s was not existing " \
+                          "in %s table ######" % (deleted, uuid, table_name)
+
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.update_row_capacity DB Exception %d : %s" % (e.args[0], e.args[1])
 
 
     def __str2db_format(self, data):
@@ -244,14 +286,13 @@ class resource_db():
 
 
 if __name__ == '__main__':
-    # INSERT= {"mem_total": 10, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_availble": 7}
     db = resource_db()
     a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-    table_name = 'reservation'
     cursor=db.con.cursor()
     # print data.keys()
     # print data.values()
-    #db.add_row_rsv(cursor, table_name, data)
+    db.add_row_rs('vcpu_capacity',vcpu) #sh_compute.vmem_op_stats())
     #db.delete_row_rsv(table_name,'12345')
-    db.update_row_rsv(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
-    db.get_rsv_id(table_name,'12345')
+    # db.update_row_rsv_timestamp(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
+    # db.get_rsv_id(table_name,'12345')
+    #db.update_row_capacity('vmem_capacity', 2, vmem_capa)
