@@ -27,4 +27,5 @@ class capacity():
         ''' this function is called after any operations like create/update/delete
         return dictionary (need to define dict format for resources capacity included compute and network)
         throw out exception if calculation is failed
+        
         '''

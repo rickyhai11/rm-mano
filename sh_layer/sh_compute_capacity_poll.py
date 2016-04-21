@@ -25,8 +25,8 @@ class op_compute_capacity():
     def get_stats(self,nova_client):
         self.nova_client.authenticate()
         data = nova_client.hypervisor_stats.statistics()._info
-        vcpu_allocation_ratio =16
-        memory_allocation_ratio =1.5
+        vcpu_allocation_ratio = 16
+        memory_allocation_ratio = 1.5
         print data
         return {
             'servers': [data['count'], data['current_workload']],
@@ -83,7 +83,7 @@ def poll_compute_op(config):
 
     #getting compute resource data from hypervisor
     dat = op_compute_capacity(nova_client)
-    rs_data= dat.get_stats(nova_client)
+    rs_data = dat.get_stats(nova_client)
 
     return rs_data
 
@@ -93,20 +93,20 @@ def vcpu_op_stats():
     {'vcpu_total': 32, 'vcpu_available': 32, 'cpu_total': 2, 'vcpu_used': 0, 'cpu_available': 2}
     :return: {'vcpu_total': 32, 'vcpu_available': 32, 'cpu_total': 2, 'vcpu_used': 0, 'cpu_available': 2}
     '''
-    rs_data=poll_compute_op(config)
-    vcpus_capacity= rs_data['vcpu_capacity']
+    rs_data = poll_compute_op(config)
+    vcpus_capacity = rs_data['vcpu_capacity']
 
     return vcpus_capacity
 
 def vmem_op_stats():
-    rs_data=poll_compute_op(config)
-    vmem_capactity= rs_data['vmem_capacity']
+    rs_data = poll_compute_op(config)
+    vmem_capactity = rs_data['vmem_capacity']
 
     return vmem_capactity
 
 def vdisk_op_stats():
-    rs_data=poll_compute_op(config)
-    vdisk_capactity= rs_data['vdisk_capacity']
+    rs_data = poll_compute_op(config)
+    vdisk_capactity = rs_data['vdisk_capacity']
 
     return vdisk_capactity
  

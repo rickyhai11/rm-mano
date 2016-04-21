@@ -16,6 +16,8 @@ from requests.exceptions import ConnectionError
 
 
 class sh_reservation():
+    def __init__(self):
+        todo
 
     def create_resercation(self):
         todo
@@ -28,10 +30,9 @@ class sh_reservation():
     def update_reservation(self):
         todo
 
-    def get_reservation(self):
+    def list_rsv_by_id(self):
+
         todo
-
-
 
 
 

@@ -1,16 +1,23 @@
+import MySQLdb.cursors
 import MySQLdb as rmdb
 import json
 import sys
-from sh_layer import sh_compute_capacity_poll as sh_compute
 from threading import Thread
-data = {'reservation_id': '12345',
-        'label': 'test1',
+
+import todo
+from sh_layer import sh_compute_capacity_poll as sh_compute
+
+
+data = {'reservation_id': '6789',
+        'label': 'test2',
         'host': "hai_compute",
-        'user': 'ricky',
+        'user': 'hainguyen',
         'project': 'admin',
-        'start_time': '2016-04-13 12:19:20',
-        'end_time': '2016-04-13 12:30:20',
+        'start_time': '2016-04-21 12:11:11',
+        'end_time': '2016-04-21 12:22:22',
         'flavor_id': '1',
+        'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
         'summary': 'reservation testing',
         'status': 'created'
         }
@@ -20,10 +27,17 @@ Should consider to user array for status field
 
 vmem_capa= {'uuid': 3,"mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
 
-vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
+vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
             #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
+flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
+
+image_dict = {'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10', 'name': 'ubuntu_01'}
 
 class resource_db():
+
+    ####################################################################################################################
+    #connect and disconnect DB
+    ####################################################################################################################
     def __init__(self):
         #initialization
         return
@@ -41,8 +55,9 @@ class resource_db():
             if user is not None: self.user = user
             if passwd is not None: self.passwd = passwd
             if database is not None: self.database = database
+            # if cursorclass is not None: self.cursorclass = cursorclass
 
-            self.con =rmdb.connect(self.host, self.user, self.passwd, self.database)
+            self.con =MySQLdb.connect(self.host, self.user, self.passwd, self.database)
             print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
             return 0
         except rmdb.Error, e:
@@ -62,40 +77,47 @@ class resource_db():
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
 
-    def add_row_rs(self, table_name, rowdict):
-        ''' add_row_ resources could be used like global adding function for adding any data with dict/json format to DB
-        for instance:
+
+    ####################################################################################################################
+    #CRUD operation with reservation DB
+    ####################################################################################################################
+
+    # common adding data to DB table function
+    def add_row_rs(self, table_name, row_dict):
+        ''' add_row_resources could be used like global adding function for adding any data with dict/json format to DB
+        for example:
             if Add a new reservation to reservation table
             input parameters:
-            cursor from rm_db object
-            table_name: name of table in mySQL DB
-            rowdict: dictionary for reservation attributes as below structure
-                data = {'reservation_id': '12345',
-                'label': 'test1',
-                'host': "hai_compute",
-                'user': 'ricky',
-                'project': 'admin',
-                'start_time': '2016-04-13 12:19:20',
-                'end_time': '2016-04-13 12:30:20',
-                'flavor_id': '1',
-                'summary': 'reservation testing',
-                'status': 'created'
-                }
-                XXX tablename not sanitized
-                XXX test for allowed keys is case-sensitive
-                filter out keys that are not column names'''
+                table_name: name of table in mySQL DB
+                rowdict: dictionary for reservation attributes as below structure
+                    data = {'reservation_id': '12345',
+                    'label': 'test1',
+                    'host': "hai_compute",
+                    'user': 'ricky',
+                    'project': 'admin',
+                    'start_time': '2016-04-13 12:19:20',
+                    'end_time': '2016-04-13 12:30:20',
+                    'flavor_id': '1',
+                    'image_id': 'asddsds',
+                    'instance_id': "sjdgsjhdgsjh"
+                    'summary': 'reservation testing',
+                    'status': 'created'
+                    }
+                    XXX tablename not sanitized
+                    XXX test for allowed keys is case-sensitive
+                    filter out keys that are not column names'''
 
-        #self.con
+        self.con
         self.cursor=self.con.cursor()
         self.cursor.execute("describe %s" % table_name)
         self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
-        print self.allowed_keys
-        self.keys = self.allowed_keys.intersection(rowdict)
+        #print self.allowed_keys
+        self.keys = self.allowed_keys.intersection(row_dict)
         #print "print keys"
         #print self.keys
 
-        if len(rowdict) > len(self.keys):
-            unknown_keys = set(rowdict) - self.allowed_keys
+        if len(row_dict) > len(self.keys):
+            unknown_keys = set(row_dict) - self.allowed_keys
             print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
 
         columns = ", ".join(self.keys)
@@ -103,18 +125,18 @@ class resource_db():
         try:
             sql = "insert into %s (%s) values (%s)" % (
                 table_name, columns, values_template)
-            values = tuple(rowdict[key] for key in self.keys)
+            values = tuple(row_dict[key] for key in self.keys)
             print sql
             print values
             self.cursor.execute(sql, values)
             self.con.commit()
-            print "insert successfully"
+            print "Inserted new row successfully"
         except (rmdb.Error, AttributeError), e:
-            print "resource_db.add_row DB Exception %d : %s" % (e.args[0], e.args[1])
+            print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
             self.con.rollback()
 
 
-    def delete_row_rsv(self,table_name, reservation_id):
+    def delete_row_by_rsv_id(self, table_name, reservation_id):
         '''
         Delete a reservation from database with reservation ID from reservation table
         :param table:
@@ -133,9 +155,9 @@ class resource_db():
         except (rmdb.Error, AttributeError), e:
                 print "resource_db.delete_row DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
-    def update_row_rsv_timestamp(self, table_name, reservation_id, start_time, end_time):
+    def update_row_timestamp_by_rsv_id(self, table_name, reservation_id, start_time, end_time):
         '''
-        update start_time and end_time of a reservation from reservation table
+        this function is to update start_time and end_time of a reservation from reservation table
         :param self:
         :param reservation_id:
         :param start_time:
@@ -156,7 +178,15 @@ class resource_db():
         except (rmdb.Error, AttributeError), e:
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    def get_rsv_id(self, table_name, reservation_id):
+    def update_row_values_by_rsv_id(self, talble_name, reservation_id, new_values):
+        todo()
+        '''
+        this function is to update values for a reservation
+        '''
+        return 1
+
+
+    def get_rsv_by_id(self, table_name, reservation_id):
         '''
         this function is to list a reservation from DB table with reservation_id
         :param table_name:
@@ -165,25 +195,72 @@ class resource_db():
         '''
         try:
             with self.con:
-                self.cur= self.con.cursor()
-                sql= "SELECT * FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
+                self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
+                sql = "SELECT * FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
                 self.cur.execute(sql)
-                rows=self.cur.fetchall()
-                listed= self.cur.rowcount
-                print "list a reservation with id %s successfully" %reservation_id
-                print listed
-                print rows
+                rows = self.cur.fetchone()
+                listed = self.cur.rowcount
+                print "query reservation with id %s successfully" % reservation_id
+                #print listed
+                print rows['reservation_id']
                 return listed, rows
         except(rmdb.Error, AttributeError), e:
-            print "resource_db.get_rsv_id DB exception %d: %s" % (e.args[0], e.args[1])
+            print "resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
 
-    def update_row_capacity(self, table_name, uuid, new_values_dict):
+    # common function- shared function for get values of a column in a table
+    def get_column_from_table(self, table_name, column):
+        '''
+        this function is to get values of a column in a table
+        :param table_name:
+        :param column: name of column
+        :return: list of values for that coresponding column
+        '''
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "SELECT %s FROM %s" % (column, table_name)
+                print sql
+                self.cur.execute(sql)
+                rows = self.cur.fetchall()
+                print rows
+                #for row in rows:
+                    #print row[0]
+                return rows
+        except(rmdb.Error, AttributeError), e:
+            print "resource_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
+
+    def get_rsv_by_status(self, status):
+        try:
+            with self.con:
+                self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
+                sql = "SELECT * FROM reservation WHERE status= '%s'" % status
+                self.cur.execute(sql)
+                list_rsv = self.cur.fetchall()
+                listed = self.cur.rowcount
+                print "There are %s reservations with '%s' status." % (listed, status)
+                #print list_rsv
+                return list_rsv
+        except(rmdb.Error, AttributeError), e:
+            print "resource_db.get_rsv_by_status DB exception %d: %s" % (e.args[0], e.args[1])
+
+
+
+
+    ####################################################################################################################
+    # CRUD DB operations which are related to compute and network resources
+    ####################################################################################################################
+    '''
+    # re-use common adding data to db function for adding new row into db table
+    def add_row_rs(self, table_name, row_dict)
+    '''
+    def update_row_capacity_by_uuid(self, table_name, uuid, new_values_dict):
         '''
         Removes the old (based on uuid) and adds the new values for resource capacity tables (vcpu, vmem,vdisk, network etc...)
         Attribute
         :param table_name: table where to insert
         :param uuid: input uuid that using to del
-        :param new_values_dict:
+        :param new_values_dict: is a dictionary with format as below (included new 'uuid' field)
+            vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20,"vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
         :return: (delete, new_uuid)
         '''
         try:
@@ -195,22 +272,75 @@ class resource_db():
                 deleted = self.cur.rowcount
                 #print deleted
                 if deleted > 0 and new_values_dict:
-                    print "delete successfully next step --> adding new values"
+                    print "Deleted successfully next step --> adding new values"
                     self.add_row_rs(table_name, new_values_dict)
-                    print "Update new values for table %s successfully" % table_name
+                    print "Updated new values into %s table successfully" % table_name
                     new_uuid = new_values_dict['uuid']
 
                     return deleted, new_uuid
 
                 else:
-                    print "failed to delete previous values in db ######'%s row has been deleted'###### OR " \
+                    print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
                           "###### 'uuid': %s was not existing " \
                           "in %s table ######" % (deleted, uuid, table_name)
 
         except (rmdb.Error, AttributeError), e:
-            print "resource_db.update_row_capacity DB Exception %d : %s" % (e.args[0], e.args[1])
+            print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
+
+    def delete_row_capacity_by_uuid(self, table_name, uuid):
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "DELETE FROM %s WHERE uuid= '%s'" % (table_name, uuid)
+                print sql
+                self.cur.execute(sql)
+                deleted = self.cur.rowcount
+                #print deleted
+                if deleted > 0:
+                    print "Deleted successfully next step --> adding new values"
+                    return deleted
+
+                else:
+                    print "Failed to delete"
+                    print "###### %s row has been deleted ######" % deleted
+                    print "###### 'uuid': %s was not existing in %s table ######" % (uuid, table_name)
+
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
+
+    def get_row_capacity_by_uuid(self, table_name, uuid):
+        try:
+            with self.con:
+                self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
+                sql = "SELECT * FROM %s WHERE uuid = '%s'" % (table_name, uuid)
+                self.cur.execute(sql)
+                rows = self.cur.fetchone()
+                listed = self.cur.rowcount
+                print " Query capacity with uuid %s successfully" % uuid
+                print listed
+                print rows
+                return listed, rows
+        except(rmdb.Error, AttributeError), e:
+            print "resource_db.get_row_capacity_by_uuid DB exception %d: %s" % (e.args[0], e.args[1])
+
+    def get_table_capacity(self, table_name):
+        try:
+            with self.con:
+                self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
+                sql = "SELECT * FROM %s" % table_name
+                self.cur.execute(sql)
+                rows = self.cur.fetchall()
+                for row in rows:
+                    print row
+                print " query all %s table successfully" % table_name
+                return rows
+        except(rmdb.Error, AttributeError), e:
+            print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 
 
+    ####################################################################################################################
+    #unused functions so far (before intergration with playnetMANO v2)
+    ####################################################################################################################
     def __str2db_format(self, data):
         '''Convert string data to database format.
         If data is None it returns the 'Null' text,
@@ -284,15 +414,27 @@ class resource_db():
                 if "'" in v:
                     data[k] = data[k].replace("'","_")
 
+    ####################################################################################################################
+    # main function for testing above code
+    ####################################################################################################################
+
 
 if __name__ == '__main__':
     db = resource_db()
     a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-    cursor=db.con.cursor()
-    # print data.keys()
-    # print data.values()
-    db.add_row_rs('vcpu_capacity',vcpu) #sh_compute.vmem_op_stats())
-    #db.delete_row_rsv(table_name,'12345')
-    # db.update_row_rsv_timestamp(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
-    # db.get_rsv_id(table_name,'12345')
-    #db.update_row_capacity('vmem_capacity', 2, vmem_capa)
+    #cursor = db.con.cursor()
+    #cursor = db.con.cursor(MySQLdb.cursors.DictCursor)
+    #db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
+    #db.add_row_rs('image_id', image_dict) #sh_compute.vmem_op_stats())
+
+    #db.delete_row_by_rsv_id(table_name,'12345')
+    # db.update_row_timestamp_by_rsv_id(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
+    #db.get_rsv_by_id('reservation','12345')
+    #db.update_row_capacity_by_uuid('vmem_capacity', 2, vmem_capa)
+    #dat_table = db.get_row_capacity_by_uuid('vcpu_capacity', 11)
+    #print type(dat_table)
+    list_rsv = db.get_rsv_by_status('created')
+    for rsv in list_rsv:
+        print rsv
+        start_time = rsv['start_time']
+        print start_time
