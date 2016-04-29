@@ -7,7 +7,7 @@ from threading import Thread
 import todo
 from sh_layer import sh_compute_capacity_poll as sh_compute
 
-
+global data
 data = {'reservation_id': '6789',
         'label': 'test2',
         'host': "hai_compute",
@@ -40,7 +40,8 @@ class resource_db():
     ####################################################################################################################
     def __init__(self):
         #initialization
-        return
+        print "establishing the DB connection"
+
     def connect_db(self, host=None, user=None, passwd=None, database=None):
         '''
         :param host:
@@ -59,7 +60,7 @@ class resource_db():
 
             self.con =MySQLdb.connect(self.host, self.user, self.passwd, self.database)
             print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
-            return 0
+            return self.con
         except rmdb.Error, e:
             print "cannot connect to %s@%s ---> %s Error %d:%s" % (self.user, self.host, self.database, e.args[0],
                                                                    e.args[1])
@@ -76,6 +77,11 @@ class resource_db():
         except AttributeError, e: #self.con not defined
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
+
+    def reload_connect_db(self):
+        self.con = self.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+        if self.con is not None:
+            return self.con
 
 
     ####################################################################################################################
@@ -108,7 +114,7 @@ class resource_db():
                     filter out keys that are not column names'''
 
         self.con
-        self.cursor=self.con.cursor()
+        self.cursor=self.con.cursor(MySQLdb.cursors.DictCursor)
         self.cursor.execute("describe %s" % table_name)
         self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
         #print self.allowed_keys
@@ -129,8 +135,11 @@ class resource_db():
             print sql
             print values
             self.cursor.execute(sql, values)
+            added = self.cur.rowcount
             self.con.commit()
             print "Inserted new row successfully"
+            return added
+
         except (rmdb.Error, AttributeError), e:
             print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
             self.con.rollback()
@@ -178,12 +187,30 @@ class resource_db():
         except (rmdb.Error, AttributeError), e:
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    def update_row_values_by_rsv_id(self, talble_name, reservation_id, new_values):
-        todo()
+
+    def update_row_vapp_id_by_rsv_id(self, table_name, reservation_id, vapp_id):
         '''
         this function is to update values for a reservation
+
+        :param talble_name:
+        :param reservation_id: esxting reservation in DB
+        :param vapp_id = instance_id in this case this field need to be updated after starting time has been triggered
+        and instance has been created
+        :return:
         '''
-        return 1
+        self.con = self.reload_connect_db()
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "UPDATE %s SET instance_id='%s' WHERE reservation_id = '%s'" % (table_name,
+                                                                            vapp_id, reservation_id)
+                print sql
+                self.cur.execute(sql)
+                updated = self.cur.rowcount
+                print "Updated vapp_id: %s successfully for %s reservation" % (vapp_id, updated)
+            return updated
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
 
     def get_rsv_by_id(self, table_name, reservation_id):
@@ -230,9 +257,10 @@ class resource_db():
             print "resource_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_rsv_by_status(self, status):
+        self.con = self.reload_connect_db()
         try:
             with self.con:
-                self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
+                self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
                 sql = "SELECT * FROM reservation WHERE status= '%s'" % status
                 self.cur.execute(sql)
                 list_rsv = self.cur.fetchall()
@@ -341,6 +369,7 @@ class resource_db():
     ####################################################################################################################
     #unused functions so far (before intergration with playnetMANO v2)
     ####################################################################################################################
+
     def __str2db_format(self, data):
         '''Convert string data to database format.
         If data is None it returns the 'Null' text,
@@ -414,10 +443,10 @@ class resource_db():
                 if "'" in v:
                     data[k] = data[k].replace("'","_")
 
+
     ####################################################################################################################
     # main function for testing above code
     ####################################################################################################################
-
 
 if __name__ == '__main__':
     db = resource_db()

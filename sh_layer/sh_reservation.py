@@ -1,11 +1,11 @@
-import sys
-
 import todo
-import resource_db
-
+from resource_db import resource_db as rdb
 import vimconn
+
+import sys
 import json
 import time
+import datetime
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -18,25 +18,70 @@ from neutronclient.neutron import client as neClient
 from neutronclient.common import exceptions as neExceptions
 from requests.exceptions import ConnectionError
 
+global data
+data = {'reservation_id': '13579',
+        'label': 'test3',
+        'host': "hai_compute_3",
+        'user': 'hainguyen_3',
+        'project': 'admin',
+        'start_time': '2016-04-29 23:40:11',
+        'end_time': '2016-04-30 01:22:22',
+        'flavor_id': '1',
+        'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
+        'summary': 'reservation testing',
+        'status': 'created'
+        }
+'''
+Should consider to user array for status field
+'''
+
+vmem_capa= {'uuid': 3,"mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
+
+vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
+            #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
+flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
+
+image_dict = {'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10', 'name': 'ubuntu_01'}
 
 class sh_reservation():
     def __init__(self):
         todo
 
-    def create_resercation(self):
-        todo
+    def create_reservation(self):
+        result = rdb.add_row_rs(table_name='reservation', row_dict=data)
+        if result > 0:
+            print "created reservation successfully "
+            return result
 
-
-    def delete_reservation(self):
-        todo
+    def delete_reservation(self, reservation_id):
+        result = rdb.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
+        if result > 0:
+            print "deleted successfully a reservation with reservation_id: %s" % reservation_id
+            return result, reservation_id
 
 
     def update_reservation(self):
-        todo
+        todo()
+
+
+    def update_time_stamp_reservation(self, reservation_id, start_time, end_time):
+        result = rdb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+                                                    start_time=start_time, end_time=end_time)
+        if result > 0:
+            print "updated starting time and ending time successfully for reservation_id: %s" % reservation_id
+            return result, reservation_id
 
     def list_rsv_by_id(self):
 
         todo
+    def list_all_created_rsv(self):
+            list_created_rsv = rdb.get_rsv_by_status(status='created')
+            print list_created_rsv
+            return list_created_rsv
+
+
+
 
 
 
@@ -48,17 +93,39 @@ class sh_control():
     def start_time_trigger(self):
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.74:5000/v2.0",
                                                   url_admin="", user="admin", passwd="zz")
-        # con_op =nproject._reload_connection_tenant('admin')
-        # nova = self.nova.servers.create
-        nproject.new_project_vapp(project_id='admin', image_id='19f7025b-b78a-4bf0-bc37-0cba68e16b10',
-                                  network_id='f3d72a2d-1a56-46e6-b0f7-bda7ca87788e',
-                                  description='vm_test01')
+        reservations = sh_reservation()
+        while True:
+            rsvs = reservations.list_all_created_rsv()
+            for rsv in rsvs:
+                print rsv
+                start_time = rsv['start_time']
+                reservation_id = rsv['reservation_id']
+                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=2)):
+                    res, vapp_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
+                        image_id='19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+                            network_id='f3d72a2d-1a56-46e6-b0f7-bda7ca87788e',
+                                description='vm_test01')
+                    # _rdb = rdb.resource_db()  #call for resource_db() class
+                    rdb.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+                                                      vapp_id=vapp_id)
 
+                    print "created instance successfully"
+            time.sleep(100)
 
 
     def end_time_trigger(self):
-        todo
-
+        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.74:5000/v2.0",
+                                                  url_admin="", user="admin", passwd="zz")
+        reservations = sh_reservation()
+        while True:
+            rsvs = reservations.list_all_created_rsv()
+            for rsv in rsvs:
+                print rsv
+                start_time = rsv['end_time']
+                vapp_id = rsv['instance_id']
+                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=2)):
+                    nproject.delete_vapp(vapp_id)
+            time.sleep(100)
 
 '''
 This class is implemented for iteracting with openstack (VIM)
@@ -86,13 +153,13 @@ class vimconnector(vimconn.vimconnector):
         if passwd:
             self.k_creds['password'] = passwd
             self.n_creds['api_key']  = passwd
-        self.reload_client       = True
+        self.reload_client = True
 
     def __setitem__(self, index, value):
         '''Set individuals parameters
         Throw TypeError, KeyError
         '''
-        if index=='tenant':
+        if index == 'tenant':
             self.reload_client=True
             self.tenant = value
             if value:
@@ -101,7 +168,7 @@ class vimconnector(vimconn.vimconnector):
             else:
                 del self.k_creds['tenant_name']
                 del self.n_creds['project_id']
-        elif index=='user':
+        elif index == 'user':
             self.reload_client = True
             self.user = value
             if value:
@@ -110,7 +177,7 @@ class vimconnector(vimconn.vimconnector):
             else:
                 del self.k_creds['username']
                 del self.n_creds['username']
-        elif index=='passwd':
+        elif index == 'passwd':
             self.reload_client=True
             self.passwd = value
             if value:
@@ -119,7 +186,7 @@ class vimconnector(vimconn.vimconnector):
             else:
                 del self.k_creds['password']
                 del self.n_creds['api_key']
-        elif index=='url':
+        elif index == 'url':
             self.reload_client=True
             self.url = value
             if value:
@@ -128,7 +195,7 @@ class vimconnector(vimconn.vimconnector):
             else:
                 raise TypeError, 'url param can not be NoneType'
         else:
-            vimconn.vimconnector.__setitem__(self,index, value)
+            vimconn.vimconnector.__setitem__(self, index, value)
 
     def _reload_connection(self):
         '''Called before any operation, it check if credentials has changed
@@ -216,6 +283,43 @@ class vimconnector(vimconn.vimconnector):
             return 400, project_id, "error"
 
 
+    def delete_vapp(self,vapp_id):
+        if self.debug:
+            print "osconnector: Deleting  a  tenant from VIM"
+        try:
+          #  print tenant_id + " " + mgnt_network_id + " " +  ctrl_network_id + " " + " " + EMA_iid
+            self._reload_connection()
+
+
+            self.nova.servers.delete(vapp_id)
+            time.sleep(7)
+           # subnetm = self.neutron.list_subnets(network_id = mgnt_network_id)['subnets'][0]
+            #router = self.neutron.list_routers(name = 'management-ext')['routers'][0]
+            #self.neutron.remove_interface_router(router['id'], { 'subnet_id' : subnetm['id'] } )
+            #self.neutron.remove_gateway_router(router['id'])
+            #self.neutron.delete_router(router_id)
+
+
+            #self.neutron.delete_network(mgnt_network_id)
+
+
+
+            #self.keystone.tenants.add_user(self.k_creds["username"], #role)
+            return 200, vapp_id
+        except ksExceptions.ConnectionError, e:
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        except ksExceptions.ClientException, e: #TODO remove
+            error_value=-vimconn.HTTP_Bad_Request
+            error_text= type(e).__name__ + ": "+  (str(e) if len(e.args)==0 else str(e.args[0]))
+        #TODO insert exception vimconn.HTTP_Unauthorized
+        #if reaching here is because an exception
+        if self.debug:
+            print "delete_tenant " + error_text
+        return error_value, error_text
+
+
+
     def get_tenant_vminstance(self,vm_id):
         '''this function could be reused for getting instance_id from openstack (VIM). Returns the VM instance information from VIM'''
         if self.debug:
@@ -234,14 +338,22 @@ class vimconnector(vimconn.vimconnector):
         #TODO insert exception vimconn.HTTP_Unauthorized
         #if reaching here is because an exception
         if self.debug:
-            print "get_tenant_vminstance " + error_text
+            print "get_tenant_vminstance" + error_text
         return error_value, error_text
 
 
-
 if __name__ == '__main__':
-    start_vnf = sh_control()
-    start_vnf.start_time_trigger()
+    try:
+        # db = resource_db.resource_db()
+        # a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+        start_vnf = sh_control()
+        # start_vnf.start_time_trigger()
+        start_vnf.end_time_trigger()
+    except KeyboardInterrupt:
+        print >> sys.stderr, '\nExiting by user request.\n'
+        sys.exit(0)
 
+    # test = sh_reservation()
+    # test.connect_db()
 
 
