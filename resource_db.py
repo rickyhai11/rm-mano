@@ -188,6 +188,39 @@ class resource_db():
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
 
+    def update_row_rsv(self, table_name, reservation_id, new_values_dict):
+        '''
+        Removes the old (based on reservation_id) and adds a new reservation with new values (new reservation is created as well)
+        Attribute
+        :param table_name: table where to insert
+        :param old_reservation:
+        :param new_values_dict: is a dictionary with format as below
+        :return: (delete, new_reservation_id)
+        '''
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "DELETE FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
+                print sql
+                self.cur.execute(sql)
+                deleted = self.cur.rowcount
+                #print deleted
+                if deleted > 0 and new_values_dict:
+                    print "Deleted successfully next step --> adding a new reservation for new values"
+                    self.add_row_rs(table_name, new_values_dict)
+                    print "Updated new values into %s table successfully" % table_name
+                    new_reservation_id = new_values_dict['reservation_id']
+
+                    return deleted, new_reservation_id
+
+                else:
+                    print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
+                          "###### 'reservation_id': %s was not existing " \
+                          "in %s table ######" % (deleted, reservation_id, table_name)
+
+        except (rmdb.Error, AttributeError), e:
+            print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
+
     def update_row_vapp_id_by_rsv_id(self, table_name, reservation_id, vapp_id):
         '''
         this function is to update values for a reservation

@@ -61,9 +61,12 @@ class sh_reservation():
             return result, reservation_id
 
 
-    def update_reservation(self):
-        todo()
-
+    def update_reservation(self, reservation_id, new_values_dict):
+        result, reservation_id = rdb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
+                                                    new_values_dict=new_values_dict)
+        if result > 0:
+            print "sh_reservation.update_reservation() - updated reservation successfully"
+            return result, reservation_id
 
     def update_time_stamp_reservation(self, reservation_id, start_time, end_time):
         result = rdb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
@@ -79,9 +82,6 @@ class sh_reservation():
             list_created_rsv = rdb.get_rsv_by_status(status='created')
             print list_created_rsv
             return list_created_rsv
-
-
-
 
 
 
