@@ -3,6 +3,7 @@ import MySQLdb as rmdb
 import json
 import sys
 from threading import Thread
+from collections import defaultdict
 
 import todo
 from sh_layer import sh_compute_capacity_poll as sh_compute
@@ -113,8 +114,10 @@ class resource_db():
                     XXX test for allowed keys is case-sensitive
                     filter out keys that are not column names'''
 
+        self.con = self.reload_connect_db()
+
         self.con
-        self.cursor=self.con.cursor(MySQLdb.cursors.DictCursor)
+        self.cursor=self.con.cursor()
         self.cursor.execute("describe %s" % table_name)
         self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
         #print self.allowed_keys
@@ -135,7 +138,7 @@ class resource_db():
             print sql
             print values
             self.cursor.execute(sql, values)
-            added = self.cur.rowcount
+            added = self.cursor.rowcount
             self.con.commit()
             print "Inserted new row successfully"
             return added

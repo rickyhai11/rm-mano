@@ -1,6 +1,8 @@
 import todo
-from resource_db import resource_db as rdb
+# from resource_db import resource_db as rdb
+import resource_db as rdb
 import vimconn
+from multiprocessing import Process
 
 import sys
 import json
@@ -19,15 +21,15 @@ from neutronclient.common import exceptions as neExceptions
 from requests.exceptions import ConnectionError
 
 global data
-data = {'reservation_id': '13579',
+data = {'reservation_id': '12345',
         'label': 'test3',
         'host': "hai_compute_3",
         'user': 'hainguyen_3',
         'project': 'admin',
-        'start_time': '2016-04-29 23:40:11',
-        'end_time': '2016-04-30 01:22:22',
+        'start_time': '2016-05-03 00:59:00',
+        'end_time': '2016-05-03 01:05:00',
         'flavor_id': '1',
-        'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+        'image_id': '80b5f1d7-ba4d-43a6-85b4-7bf8429e9032',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
         'summary': 'reservation testing',
         'status': 'created'
@@ -36,7 +38,7 @@ data = {'reservation_id': '13579',
 Should consider to user array for status field
 '''
 
-vmem_capa= {'uuid': 3,"mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
+vmem_capa= {'uuid': 3, "mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
 
 vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
             #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
@@ -48,8 +50,9 @@ class sh_reservation():
     def __init__(self):
         todo
 
-    def create_reservation(self):
-        result = rdb.add_row_rs(table_name='reservation', row_dict=data)
+    def create_reservation(self, data):
+        rdb_ = rdb.resource_db()
+        result = rdb_.add_row_rs('reservation', data)
         if result > 0:
             print "created reservation successfully "
             return result
@@ -79,7 +82,8 @@ class sh_reservation():
 
         todo
     def list_all_created_rsv(self):
-            list_created_rsv = rdb.get_rsv_by_status(status='created')
+            rdb_ = rdb.resource_db()
+            list_created_rsv = rdb_.get_rsv_by_status(status='created')
             print list_created_rsv
             return list_created_rsv
 
@@ -91,8 +95,8 @@ class sh_control():
         return
 
     def start_time_trigger(self):
-        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.74:5000/v2.0",
-                                                  url_admin="", user="admin", passwd="zz")
+        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
+                                                  url_admin="", user="admin", passwd="secrete")
         reservations = sh_reservation()
         while True:
             rsvs = reservations.list_all_created_rsv()
@@ -100,13 +104,13 @@ class sh_control():
                 print rsv
                 start_time = rsv['start_time']
                 reservation_id = rsv['reservation_id']
-                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=2)):
+                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
                     res, vapp_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
-                        image_id='19f7025b-b78a-4bf0-bc37-0cba68e16b10',
-                            network_id='f3d72a2d-1a56-46e6-b0f7-bda7ca87788e',
+                        image_id='80b5f1d7-ba4d-43a6-85b4-7bf8429e9032',
+                            network_id='ebf2704c-bf50-4594-b429-4b3d6905074f',
                                 description='vm_test01')
-                    # _rdb = rdb.resource_db()  #call for resource_db() class
-                    rdb.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+                    rdb_ = rdb.resource_db()  #call for resource_db() class
+                    rdb_.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                       vapp_id=vapp_id)
 
                     print "created instance successfully"
@@ -114,8 +118,8 @@ class sh_control():
 
 
     def end_time_trigger(self):
-        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.74:5000/v2.0",
-                                                  url_admin="", user="admin", passwd="zz")
+        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
+                                                  url_admin="", user="admin", passwd="secrete")
         reservations = sh_reservation()
         while True:
             rsvs = reservations.list_all_created_rsv()
@@ -123,7 +127,7 @@ class sh_control():
                 print rsv
                 start_time = rsv['end_time']
                 vapp_id = rsv['instance_id']
-                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=2)):
+                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
                     nproject.delete_vapp(vapp_id)
             time.sleep(100)
 
@@ -208,11 +212,11 @@ class vimconnector(vimconn.vimconnector):
                 raise ksExceptions.ClientException("Not enough parameters to connect to openstack")
             self.nova = nClient.Client(2, **self.n_creds)
             self.keystone = ksClient.Client(**self.k_creds)
-            self.glance_endpoint = 'http://223.194.33.74:9292'
+            self.glance_endpoint = 'http://223.194.33.59:9292'
            #endpoint fixed(2015.12.02) if changed infra return again
            #self.glance_endpoint = self.keystone.service_catalog.url_for(service_type='image', endpoint_type='publicURL')
             self.glance = glClient.Client(self.glance_endpoint, token=self.keystone.auth_token, **self.k_creds)  #TODO check k_creds vs n_creds
-            self.ne_endpoint = 'http://223.194.33.74:9696'
+            self.ne_endpoint = 'http://223.194.33.59:9696'
            #endpoint fixed(2015.12.02) if changed infra return again
            #self.ne_endpoint=self.keystone.service_catalog.url_for(service_type='network', endpoint_type='publicURL')
             self.neutron = neClient.Client('2.0', endpoint_url=self.ne_endpoint, token=self.keystone.auth_token, **self.k_creds)
@@ -341,19 +345,42 @@ class vimconnector(vimconn.vimconnector):
             print "get_tenant_vminstance" + error_text
         return error_value, error_text
 
+def main_loop():
+    # while 1:
+
+        #run two functions in parallel like two threads
+        # commands = ['start_vnf.start_time_trigger', 'start_vnf.end_time_trigger']
+        # parallelpy.run(commands=commands)
+
+    start_vnf = sh_control()
+    p1 = Process(target=start_vnf.start_time_trigger)
+    p1.start()
+    print 'p1 started '
+    p2 = Process(target=start_vnf.end_time_trigger)
+    p2.start()
+    print 'p2 started'
+    p1.join()
+    print 'p1 joined'
+    p2.join()
+    print 'p2 joined'
+
+
 
 if __name__ == '__main__':
-    try:
-        # db = resource_db.resource_db()
-        # a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-        start_vnf = sh_control()
-        # start_vnf.start_time_trigger()
-        start_vnf.end_time_trigger()
-    except KeyboardInterrupt:
-        print >> sys.stderr, '\nExiting by user request.\n'
-        sys.exit(0)
+    sh_rsv = sh_reservation()
+    create_rsv = sh_rsv.create_reservation(data=data)
+    if create_rsv > 0:
+        try:
 
-    # test = sh_reservation()
-    # test.connect_db()
+            # db = resource_db.resource_db()
+            # a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+            main_loop()
+
+        except KeyboardInterrupt:
+            print >> sys.stderr, '\nExiting by user request.\n'
+            sys.exit(0)
+
+        # test = sh_reservation()
+        # test.connect_db()
 
 
