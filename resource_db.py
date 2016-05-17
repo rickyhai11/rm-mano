@@ -40,8 +40,7 @@ class resource_db():
     #connect and disconnect DB
     ####################################################################################################################
     def __init__(self):
-        #initialization
-        print "establishing the DB connection"
+        print "============================================================================"
 
     def connect_db(self, host=None, user=None, passwd=None, database=None):
         '''
@@ -60,7 +59,7 @@ class resource_db():
             # if cursorclass is not None: self.cursorclass = cursorclass
 
             self.con =MySQLdb.connect(self.host, self.user, self.passwd, self.database)
-            print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
+            #print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
             return self.con
         except rmdb.Error, e:
             print "cannot connect to %s@%s ---> %s Error %d:%s" % (self.user, self.host, self.database, e.args[0],
@@ -116,7 +115,7 @@ class resource_db():
 
         self.con = self.reload_connect_db()
 
-        self.con
+        #self.con
         self.cursor=self.con.cursor()
         self.cursor.execute("describe %s" % table_name)
         self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
@@ -155,6 +154,8 @@ class resource_db():
         :return:
         '''
         # for retry_ in range(0,2):
+        self.con = self.reload_connect_db()
+
         try:
             with self.con:
                 self.cur= self.con.cursor()
@@ -315,7 +316,7 @@ class resource_db():
     ####################################################################################################################
     '''
     # re-use common adding data to db function for adding new row into db table
-    def add_row_rs(self, table_name, row_dict)
+        def add_row_rs(self, table_name, row_dict)
     '''
     def update_row_capacity_by_uuid(self, table_name, uuid, new_values_dict):
         '''

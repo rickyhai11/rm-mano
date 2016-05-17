@@ -21,13 +21,13 @@ from neutronclient.common import exceptions as neExceptions
 from requests.exceptions import ConnectionError
 
 global data
-data = {'reservation_id': '12345',
-        'label': 'test3',
-        'host': "hai_compute_3",
-        'user': 'hainguyen_3',
+data = {'reservation_id': '12346',
+        'label': 'test4',
+        'host': "hai_compute_4",
+        'user': 'hainguyen_4',
         'project': 'admin',
-        'start_time': '2016-05-03 00:59:00',
-        'end_time': '2016-05-03 01:05:00',
+        'start_time': '2016-05-07 14:23:00',
+        'end_time': '2016-05-07 14:27:00',
         'flavor_id': '1',
         'image_id': '80b5f1d7-ba4d-43a6-85b4-7bf8429e9032',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
@@ -58,21 +58,24 @@ class sh_reservation():
             return result
 
     def delete_reservation(self, reservation_id):
-        result = rdb.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
+        rdb_ = rdb.resource_db()
+        result = rdb_.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
         if result > 0:
             print "deleted successfully a reservation with reservation_id: %s" % reservation_id
             return result, reservation_id
 
 
     def update_reservation(self, reservation_id, new_values_dict):
-        result, reservation_id = rdb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
+        rdb_ = rdb.resource_db()
+        result, reservation_id = rdb_.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
                                                     new_values_dict=new_values_dict)
         if result > 0:
             print "sh_reservation.update_reservation() - updated reservation successfully"
             return result, reservation_id
 
     def update_time_stamp_reservation(self, reservation_id, start_time, end_time):
-        result = rdb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+        rdb_ = rdb.resource_db()
+        result = rdb_.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                     start_time=start_time, end_time=end_time)
         if result > 0:
             print "updated starting time and ending time successfully for reservation_id: %s" % reservation_id
@@ -104,11 +107,14 @@ class sh_control():
                 print rsv
                 start_time = rsv['start_time']
                 reservation_id = rsv['reservation_id']
+                image_id = rsv['image_id']
+                #network_id = rsv['network_id'] # TODO currently not added network_id to reservation table and network table is not created as well
                 if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
                     res, vapp_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
                         image_id='80b5f1d7-ba4d-43a6-85b4-7bf8429e9032',
-                            network_id='ebf2704c-bf50-4594-b429-4b3d6905074f',
+                            network_id='ebf2704c-bf50-4594-b429-4b3d6905074f',     # TODO need to replace network_id = network_id that is grabed from curent reservation row
                                 description='vm_test01')
+                    time.sleep(2)
                     rdb_ = rdb.resource_db()  #call for resource_db() class
                     rdb_.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                       vapp_id=vapp_id)
@@ -127,9 +133,14 @@ class sh_control():
                 print rsv
                 start_time = rsv['end_time']
                 vapp_id = rsv['instance_id']
+                reservation_id = rsv['reservation_id']
                 if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
                     nproject.delete_vapp(vapp_id)
-            time.sleep(100)
+                    time.sleep(3)
+                    reservations.delete_reservation(reservation_id=reservation_id)
+                    break
+                    #return result, reservation_id
+            time.sleep(2)
 
 '''
 This class is implemented for iteracting with openstack (VIM)
