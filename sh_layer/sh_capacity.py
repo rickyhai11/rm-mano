@@ -12,7 +12,7 @@ class capacity():
         ''' this function is to call to resource_db.get_vcpu_db() to get the latest row with latest timestamp
         for checking_capacity() and calculate_capacity()
         '''
-        invoke poll function from OP
+        invoke poll function from Op
 
         call to add_newrow to write new values to DB with timestamp
 
