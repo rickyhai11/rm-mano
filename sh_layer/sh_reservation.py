@@ -21,18 +21,24 @@ from neutronclient.common import exceptions as neExceptions
 from requests.exceptions import ConnectionError
 
 global data
-data = {'reservation_id': '12346',
-        'label': 'test4',
-        'host': "hai_compute_4",
-        'user': 'hainguyen_4',
-        'project': 'admin',
-        'start_time': '2016-05-07 14:23:00',
-        'end_time': '2016-05-07 14:27:00',
+data = {'reservation_id': '6789',
+        'label': 'test2',
+        'host_id': "12212817268DJKHSAJD",
+        'host_name': 'hai_compute',
+        'user_id': 'hainguyen',
+        'user_name': 'Hai',
+        'tenant_id': '4abaaa5e2e9248abafa7234709b6f654',
+        'tenant_name': 'admin',
+        'start_time': '2016-04-21 12:11:11',
+        'end_time': '2016-04-21 12:22:22',
         'flavor_id': '1',
-        'image_id': '80b5f1d7-ba4d-43a6-85b4-7bf8429e9032',
+        'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+        'network_id': 'b9effed5-1ce1-4be0-aed2-60e2ee599719',
+        'number_instance': '3',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-        'summary': 'reservation testing',
-        'status': 'created'
+        'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+        'status': 'ACTIVE',
+        'summary': 'reservation testing'
         }
 '''
 Should consider to user array for status field
@@ -86,7 +92,7 @@ class sh_reservation():
         todo
     def list_all_created_rsv(self):
             rdb_ = rdb.resource_db()
-            list_created_rsv = rdb_.get_rsv_by_status(status='created')
+            list_created_rsv = rdb_.get_rsv_by_status(status='ACTIVE')
             print list_created_rsv
             return list_created_rsv
 
@@ -143,7 +149,7 @@ class sh_control():
             time.sleep(2)
 
 '''
-This class is implemented for iteracting with openstack (VIM)
+This class is implemented for interacting with openstack (VIM)
 '''
 class vimconnector(vimconn.vimconnector):
     def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None, debug=True, config={}):

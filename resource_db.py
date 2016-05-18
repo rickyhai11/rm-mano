@@ -11,16 +11,22 @@ from sh_layer import sh_compute_capacity_poll as sh_compute
 global data
 data = {'reservation_id': '6789',
         'label': 'test2',
-        'host': "hai_compute",
-        'user': 'hainguyen',
-        'project': 'admin',
+        'host_id': "12212817268DJKHSAJD",
+        'host_name': 'hai_compute',
+        'user_id': 'hainguyen',
+        'user_name': 'Hai',
+        'tenant_id': '4abaaa5e2e9248abafa7234709b6f654',
+        'tenant_name': 'admin',
         'start_time': '2016-04-21 12:11:11',
         'end_time': '2016-04-21 12:22:22',
         'flavor_id': '1',
         'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
+        'network_id': 'b9effed5-1ce1-4be0-aed2-60e2ee599719',
+        'number_instance': '3',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-        'summary': 'reservation testing',
-        'status': 'created'
+        'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+        'status': 'ACTIVE',
+        'summary': 'reservation testing'
         }
 '''
 Should consider to user array for status field
@@ -107,7 +113,7 @@ class resource_db():
                     'image_id': 'asddsds',
                     'instance_id': "sjdgsjhdgsjh"
                     'summary': 'reservation testing',
-                    'status': 'created'
+                    'status': 'ACTIVE'
                     }
                     XXX tablename not sanitized
                     XXX test for allowed keys is case-sensitive
@@ -499,7 +505,7 @@ if __name__ == '__main__':
     #db.update_row_capacity_by_uuid('vmem_capacity', 2, vmem_capa)
     #dat_table = db.get_row_capacity_by_uuid('vcpu_capacity', 11)
     #print type(dat_table)
-    list_rsv = db.get_rsv_by_status('created')
+    list_rsv = db.get_rsv_by_status('ACTIVE')
     for rsv in list_rsv:
         print rsv
         start_time = rsv['start_time']
