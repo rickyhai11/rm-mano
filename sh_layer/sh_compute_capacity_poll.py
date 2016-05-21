@@ -9,15 +9,15 @@ from time import mktime
 
 global config 
 config = {
-    'VERSION' : '2',
+    'VERSION': '2',
     'AUTH_URL': "http://223.194.33.59:5000/v2.0/",
     'USERNAME': "admin",
-    'PASSWORD' : "secrete",
-    'TENANT_ID' : "89ac11952dc7460c9490f05f7f7407ee",
-    'TENANT_NAME' : "admin",
-    'SERVICE_TYPE' : 'compute'}
+    'PASSWORD': "stack",
+    'TENANT_ID': "cfcb18eef55b4b03bb075ea106fe771f",
+    'TENANT_NAME': "admin",
+    'SERVICE_TYPE': 'compute'}
 
-class op_compute_capacity():
+class polling_op_compute_capacity():
     
     def __init__(self, nova_client):
         self.nova_client = nova_client
@@ -31,24 +31,30 @@ class op_compute_capacity():
         return {
             'servers': [data['count'], data['current_workload']],
             'vdisk_capacity': {
+                     #'uuid' : 9999999999999,
                      'disk_total': data['local_gb'],
-                     'disk_used' : data['local_gb_used'],
-                     'disk_available' : data['free_disk_gb']},
+                     'disk_allocated' : data['local_gb_used'],
+                     'disk_available' : data['free_disk_gb'],
+                     'disk_reserved' : 0},
             'vmem_capacity': {
+                       #'uuid' : 8888888888888,
                        'mem_total':  data['memory_mb'],
                        'vmem_total': data['memory_mb'] * memory_allocation_ratio,
-                       'vmem_used': data['memory_mb_used'],
+                       'vmem_allocated': data['memory_mb_used'],
                        'mem_available': data['free_ram_mb'],
                        'vmem_available': (data['memory_mb'] * memory_allocation_ratio -
-                                data['memory_mb_used'])},
+                                data['memory_mb_used']),
+                       'vmem_reserved': 0},
             'instances': [data['running_vms']],
             'vcpu_capacity': {
+                #'uuid': 22222222222,
                 'cpu_total': data['vcpus'],
                 'vcpu_total': data['vcpus'] * vcpu_allocation_ratio,
-                'vcpu_used': data['vcpus_used'],
+                'vcpu_allocated': data['vcpus_used'],
                 'cpu_available': data['vcpus'],  # curently nova api returns number of physical cores instead of virtual cores as expected
                 'vcpu_available' : (data['vcpus'] * vcpu_allocation_ratio -
-                          data['vcpus_used']) 
+                          data['vcpus_used']),
+                'vcpu_reserved': 0
             }}
 
 def connect(config):
@@ -79,10 +85,9 @@ def poll_compute_op(config):
     #get credential to access nova api
     nova_client = connect(config)
     #print nova_client.servers.list()
-    #print nova_client.flavors.list()
 
     #getting compute resource data from hypervisor
-    dat = op_compute_capacity(nova_client)
+    dat = polling_op_compute_capacity(nova_client)
     rs_data = dat.get_stats(nova_client)
 
     return rs_data
@@ -109,9 +114,50 @@ def vdisk_op_stats():
     vdisk_capactity = rs_data['vdisk_capacity']
 
     return vdisk_capactity
- 
+
+# Reference function using json request and response
+# def load_flavors_list():
+#     l = []
+#     for project in projects.keys():
+#         headers['X-Auth-Token'] = get_token(project)
+#         r = requests.get('%s/flavors/detail' % auth_cache[project]['nova_admin_url'], headers=headers)
+#         for f in r.json()['flavors']:
+#             l.append({
+#                 'id': f['id'],
+#                 'name': f['name'],
+#                 'ram': f['ram'],
+#                 'vcpus': f['vcpus'],
+#                 'disk': f['disk']
+#             })
+#     return l
+
+def load_flavors_by_id(flavor_id):
+    nova_client = connect(config)
+    flavor_list = nova_client.flavors.list(detailed=True)
+    flavor_detail = {}
+    for flavor in flavor_list:
+        print flavor.id
+        if int(flavor.id) == int(flavor_id):
+            flavor_detail['name'] = flavor.name
+            flavor_detail['vcpu'] = flavor.vcpus
+            flavor_detail['vmem'] = flavor.ram
+            flavor_detail['vdisk'] = flavor.disk
+            print flavor_detail
+            return flavor_detail
+
+        else:
+            print("-"*35)
+            print "flavor %s is not existing in VIM (Openstack)" %flavor_id
+            print("-"*35)
+            return 0
+    # print flavor_detail
+
+
+
+
 if __name__ == '__main__':
-    print vcpu_op_stats()
+    print vdisk_op_stats()
+    load_flavors_by_id(flavor_id=1)
 
 
         

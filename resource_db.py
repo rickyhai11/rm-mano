@@ -7,22 +7,27 @@ from collections import defaultdict
 
 import todo
 from sh_layer import sh_compute_capacity_poll as sh_compute
-
+global global_config
+global_config = {'db_host': 'localhost',
+                  'db_user': 'root',
+                  'db_password': 'S@igon0011',
+                  'db_name': 'rm_db'
+                 }
 global data
 data = {'reservation_id': '6789',
         'label': 'test2',
         'host_id': "12212817268DJKHSAJD",
         'host_name': 'hai_compute',
-        'user_id': 'hainguyen',
-        'user_name': 'Hai',
-        'tenant_id': '4abaaa5e2e9248abafa7234709b6f654',
+        'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
+        'user_name': 'admin',
+        'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
         'tenant_name': 'admin',
         'start_time': '2016-04-21 12:11:11',
         'end_time': '2016-04-21 12:22:22',
         'flavor_id': '1',
-        'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10',
-        'network_id': 'b9effed5-1ce1-4be0-aed2-60e2ee599719',
-        'number_instance': '3',
+        'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
+        'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
+        'number_instance': '1',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
         'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
         'status': 'ACTIVE',
@@ -34,7 +39,7 @@ Should consider to user array for status field
 
 vmem_capa= {'uuid': 3,"mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
 
-vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
+vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20, "vcpu_allocated": 10, "cpu_available": 8, "vcpu_available": 65, 'vcpu_reserved' : 0}
             #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
 flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
 
@@ -64,9 +69,9 @@ class resource_db():
             if database is not None: self.database = database
             # if cursorclass is not None: self.cursorclass = cursorclass
 
-            self.con =MySQLdb.connect(self.host, self.user, self.passwd, self.database)
-            #print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
-            return self.con
+            self.con =rmdb.connect(self.host, self.user, self.passwd, self.database)
+            print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
+            return 0
         except rmdb.Error, e:
             print "cannot connect to %s@%s ---> %s Error %d:%s" % (self.user, self.host, self.database, e.args[0],
                                                                    e.args[1])
@@ -144,9 +149,12 @@ class resource_db():
             print values
             self.cursor.execute(sql, values)
             added = self.cursor.rowcount
+            #get last added id in a table
+            added_id = self.cursor.lastrowid  #Returns the value generated for an AUTO_INCREMENT column TODO
+            print added_id
             self.con.commit()
             print "Inserted new row successfully"
-            return added
+            return added, added_id
 
         except (rmdb.Error, AttributeError), e:
             print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
@@ -334,6 +342,7 @@ class resource_db():
             vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20,"vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
         :return: (delete, new_uuid)
         '''
+        self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur= self.con.cursor()
@@ -395,16 +404,18 @@ class resource_db():
             print "resource_db.get_row_capacity_by_uuid DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_table_capacity(self, table_name):
+        self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
                 sql = "SELECT * FROM %s" % table_name
                 self.cur.execute(sql)
                 rows = self.cur.fetchall()
-                for row in rows:
-                    print row
-                print " query all %s table successfully" % table_name
-                return rows
+                listed = self.cur.rowcount
+                # for row in rows:   # for debug
+                #     print row
+                print " query all of %s table successfully" % table_name
+                return listed, rows
         except(rmdb.Error, AttributeError), e:
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 
@@ -493,20 +504,20 @@ class resource_db():
 
 if __name__ == '__main__':
     db = resource_db()
-    a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+    #a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
     #cursor = db.con.cursor()
     #cursor = db.con.cursor(MySQLdb.cursors.DictCursor)
-    #db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
-    #db.add_row_rs('image_id', image_dict) #sh_compute.vmem_op_stats())
+    db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
+    #db.add_row_rs('vcpu_capacity', vcpu) #sh_compute.vmem_op_stats())
 
     #db.delete_row_by_rsv_id(table_name,'12345')
     # db.update_row_timestamp_by_rsv_id(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
     #db.get_rsv_by_id('reservation','12345')
     #db.update_row_capacity_by_uuid('vmem_capacity', 2, vmem_capa)
-    #dat_table = db.get_row_capacity_by_uuid('vcpu_capacity', 11)
-    #print type(dat_table)
-    list_rsv = db.get_rsv_by_status('ACTIVE')
-    for rsv in list_rsv:
-        print rsv
-        start_time = rsv['start_time']
-        print start_time
+    dat_table = db.get_table_capacity('vdisk_capacity')
+    #print dat_table
+    # list_rsv = db.get_rsv_by_status('ACTIVE')
+    # for rsv in list_rsv:
+    #     print rsv
+    #     start_time = rsv['start_time']
+    #     print start_time

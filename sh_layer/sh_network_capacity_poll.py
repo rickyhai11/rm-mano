@@ -10,10 +10,10 @@ from pprint import pformat
 import re
 config = {
     'VERSION' : '2.0',
-    'AUTH_URL': "http://223.194.33.74:5000/v2.0/",
+    'AUTH_URL': "http://223.194.33.59:5000/v2.0/",
     'USERNAME': "admin",
-    'PASSWORD' : "zz",
-    'TENANT_ID' : "bd68c380ec274c1ea7187478f7acea0a",
+    'PASSWORD' : "stack",
+    'TENANT_ID' : "4abaaa5e2e9248abafa7234709b6f654",
     'TENANT_NAME' : 'admin',
     'public_network' : 'public'
     }
