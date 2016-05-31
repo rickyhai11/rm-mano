@@ -10,29 +10,29 @@ from sh_layer import sh_compute_capacity_poll as sh_compute
 global global_config
 global_config = {'db_host': 'localhost',
                   'db_user': 'root',
-                  'db_password': 'S@igon0011',
+                  'db_passwd': 'S@igon0011',
                   'db_name': 'rm_db'
                  }
-global data
-data = {'reservation_id': '6789',
-        'label': 'test2',
-        'host_id': "12212817268DJKHSAJD",
-        'host_name': 'hai_compute',
-        'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
-        'user_name': 'admin',
-        'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-        'tenant_name': 'admin',
-        'start_time': '2016-04-21 12:11:11',
-        'end_time': '2016-04-21 12:22:22',
-        'flavor_id': '1',
-        'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
-        'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-        'number_instance': '1',
-        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-        'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
-        'status': 'ACTIVE',
-        'summary': 'reservation testing'
-        }
+# global data
+# data = {'reservation_id': '6789',
+#         'label': 'test2',
+#         'host_id': "12212817268DJKHSAJD",
+#         'host_name': 'hai_compute',
+#         'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
+#         'user_name': 'admin',
+#         'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
+#         'tenant_name': 'admin',
+#         'start_time': '2016-04-21 12:11:11',
+#         'end_time': '2016-04-21 12:22:22',
+#         'flavor_id': '1',
+#         'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
+#         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
+#         'number_instance': '1',
+#         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
+#         'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+#         'status': 'ACTIVE',
+#         'summary': 'reservation testing'
+#         }
 '''
 Should consider to user array for status field
 '''
@@ -89,10 +89,10 @@ class resource_db():
             if e[0][-5:] == "'con'": return -1, "Database internal error, no connection."
             else: raise
 
-    def reload_connect_db(self):
-        self.con = self.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-        if self.con is not None:
-            return self.con
+    # def reload_connect_db(self):
+    #     self.con = self.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
+    #     if self.con is not None:
+    #         return self.con
 
 
     ####################################################################################################################
@@ -124,9 +124,9 @@ class resource_db():
                     XXX test for allowed keys is case-sensitive
                     filter out keys that are not column names'''
 
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
 
-        #self.con
+        self.con
         self.cursor=self.con.cursor()
         self.cursor.execute("describe %s" % table_name)
         self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
@@ -153,8 +153,13 @@ class resource_db():
             added_id = self.cursor.lastrowid  #Returns the value generated for an AUTO_INCREMENT column TODO
             print added_id
             self.con.commit()
-            print "Inserted new row successfully"
-            return added, added_id
+            if added > 0:
+
+                print "Inserted new row successfully"
+                return added, added_id
+            else:
+                print "Failed to add a new row into database table: %s" % table_name
+                return added
 
         except (rmdb.Error, AttributeError), e:
             print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
@@ -168,7 +173,7 @@ class resource_db():
         :return:
         '''
         # for retry_ in range(0,2):
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
 
         try:
             with self.con:
@@ -249,7 +254,7 @@ class resource_db():
         and instance has been created
         :return:
         '''
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur= self.con.cursor()
@@ -308,7 +313,7 @@ class resource_db():
             print "resource_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_rsv_by_status(self, status):
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
@@ -316,6 +321,7 @@ class resource_db():
                 self.cur.execute(sql)
                 list_rsv = self.cur.fetchall()
                 listed = self.cur.rowcount
+                #self.cur.close()
                 print "There are %s reservations with '%s' status." % (listed, status)
                 #print list_rsv
                 return list_rsv
@@ -342,7 +348,7 @@ class resource_db():
             vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20,"vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
         :return: (delete, new_uuid)
         '''
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur= self.con.cursor()
@@ -355,9 +361,9 @@ class resource_db():
                     print "Deleted successfully next step --> adding new values"
                     self.add_row_rs(table_name, new_values_dict)
                     print "Updated new values into %s table successfully" % table_name
-                    new_uuid = new_values_dict['uuid']
+                    #new_uuid = new_values_dict['uuid']
 
-                    return deleted, new_uuid
+                    return deleted #new_uuid
 
                 else:
                     print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
@@ -404,7 +410,7 @@ class resource_db():
             print "resource_db.get_row_capacity_by_uuid DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_table_capacity(self, table_name):
-        self.con = self.reload_connect_db()
+        #self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
@@ -507,7 +513,7 @@ if __name__ == '__main__':
     #a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
     #cursor = db.con.cursor()
     #cursor = db.con.cursor(MySQLdb.cursors.DictCursor)
-    db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
+    #db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
     #db.add_row_rs('vcpu_capacity', vcpu) #sh_compute.vmem_op_stats())
 
     #db.delete_row_by_rsv_id(table_name,'12345')

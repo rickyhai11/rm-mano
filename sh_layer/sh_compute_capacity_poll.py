@@ -25,8 +25,8 @@ class polling_op_compute_capacity():
     def get_stats(self,nova_client):
         self.nova_client.authenticate()
         data = nova_client.hypervisor_stats.statistics()._info
-        vcpu_allocation_ratio = 16
-        memory_allocation_ratio = 1.5
+        vcpu_allocation_ratio = 1
+        memory_allocation_ratio = 1
         print data
         return {
             'servers': [data['count'], data['current_workload']],

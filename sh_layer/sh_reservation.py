@@ -1,6 +1,5 @@
 import todo
-# from resource_db import resource_db as rdb
-import resource_db as rdb
+import resource_db
 import vimconn
 from sh_capacity import check_resource_capacity
 from sh_capacity import calculate_reserved_compute_rs_by_flavor
@@ -11,6 +10,7 @@ import sys
 import json
 import time
 import datetime
+import threading
 
 from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
@@ -23,88 +23,87 @@ from neutronclient.neutron import client as neClient
 from neutronclient.common import exceptions as neExceptions
 from requests.exceptions import ConnectionError
 
-global global_config
-global mydb
-
-global data
-data = {'reservation_id': '6789',
-        'label': 'test2',
-        'host_id': "12212817268DJKHSAJD",
-        'host_name': 'hai_compute',
-        'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
-        'user_name': 'admin',
-        'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-        'tenant_name': 'admin',
-        'start_time': '2016-04-21 12:11:11',
-        'end_time': '2016-04-21 12:22:22',
-        'flavor_id': '1',
-        'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
-        'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-        'number_instance': '1',
-        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-        'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
-        'status': 'ACTIVE',
-        'summary': 'reservation testing'
-        }
-'''
-Should consider to user array for status field
-'''
-
-vmem_capa= {'uuid': 3, "mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
-
-vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
-            #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
-flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
-
-image_dict = {'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10', 'name': 'ubuntu_01'}
+# global global_config
+# global_config = {'db_host': 'localhost',
+#                   'db_user': 'root',
+#                   'db_passwd': 'S@igon0011',
+#                   'db_name': 'rm_db'
+#                  }
+# global data
+# data = {'reservation_id': '6789',
+#         'label': 'test2',
+#         'host_id': "12212817268DJKHSAJD",
+#         'host_name': 'hai_compute',
+#         'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
+#         'user_name': 'admin',
+#         'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
+#         'tenant_name': 'admin',
+#         'start_time': '2016-04-21 12:11:11',
+#         'end_time': '2016-04-21 12:22:22',
+#         'flavor_id': '1',
+#         'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
+#         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
+#         'number_instance': '1',
+#         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
+#         'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+#         'status': 'ACTIVE',
+#         'summary': 'reservation testing'
+#         }
+#
+# vmem_capa= {'uuid': 3, "mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
+#
+# vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
+#             #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
+# flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
+#
+# image_dict = {'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10', 'name': 'ubuntu_01'}
 
 class sh_reservation():
     def __init__(self):
         todo
 
-    def create_reservation(self, data):
-        rp = check_resource_capacity(rsv=data)
-        print rp
+    def create_reservation(self, mydb, data):
+        rp = check_resource_capacity(mydb=mydb, rsv=data)
         if rp:
-            print "over check roi nhe"
-            rdb_ = rdb.resource_db()
-            result = rdb_.add_row_rs('reservation', data)
+            print "Checking available resources. Please be patient..."
+            #rdb_ = rdb.resource_db()
+            result = mydb.add_row_rs('reservation', data)
             if result > 0:
                 print "created reservation successfully "
                 return result
         else:
-            'print checking resources error'
+            print 'checking resources error'
 
-    def delete_reservation(self, reservation_id):
-        rdb_ = rdb.resource_db()
-        result = rdb_.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
+    def delete_reservation(self, mydb, reservation_id):
+        #rdb_ = rdb.resource_db()
+        result = mydb.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
         if result > 0:
             print "deleted successfully a reservation with reservation_id: %s" % reservation_id
             return result, reservation_id
 
 
-    def update_reservation(self, reservation_id, new_values_dict):
-        rdb_ = rdb.resource_db()
-        result, reservation_id = rdb_.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
+    def update_reservation(self, mydb, reservation_id, new_values_dict):
+        # rdb_ = rdb.resource_db()
+        result, reservation_id = mydb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
                                                     new_values_dict=new_values_dict)
         if result > 0:
             print "sh_reservation.update_reservation() - updated reservation successfully"
             return result, reservation_id
 
-    def update_time_stamp_reservation(self, reservation_id, start_time, end_time):
-        rdb_ = rdb.resource_db()
-        result = rdb_.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+    def update_time_stamp_reservation(self, mydb, reservation_id, start_time, end_time):
+        # rdb_ = rdb.resource_db()
+        result = mydb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                     start_time=start_time, end_time=end_time)
         if result > 0:
             print "updated starting time and ending time successfully for reservation_id: %s" % reservation_id
             return result, reservation_id
 
     def list_rsv_by_id(self):
-
         todo
-    def list_all_created_rsv(self):
-            rdb_ = rdb.resource_db()
-            list_created_rsv = rdb_.get_rsv_by_status(status='ACTIVE')
+
+    def list_all_created_rsv(self, mydb):
+            #rdb_ = rdb.resource_db()
+            list_created_rsv = mydb.get_rsv_by_status(status='ACTIVE')
             print list_created_rsv
             return list_created_rsv
 
@@ -113,14 +112,15 @@ class sh_reservation():
 class sh_control():
 
     def __init__(self):
-        return
+        todo
 
-    def start_time_trigger(self):
+    def start_time_trigger(self, mydb):
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
                                                   url_admin="", user="admin", passwd="stack")
         reservations = sh_reservation()
+        print "start_time_trigger process is running"
         while True:
-            rsvs = reservations.list_all_created_rsv()
+            rsvs = reservations.list_all_created_rsv(mydb)
             for rsv in rsvs:
                 print rsv
                 start_time = rsv['start_time']
@@ -130,35 +130,38 @@ class sh_control():
                 if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
                     res, vapp_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
                         image_id=image_id,
-                            network_id=network_id,     # TODO need to replace network_id = network_id that is grabed from curent reservation row
+                            network_id=network_id,
                                 description='vm_test01')
                     time.sleep(2)
-                    rdb_ = rdb.resource_db()  #call for resource_db() class
-                    rdb_.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+                    #rdb_ = rdb.resource_db()  #call for resource_db() class
+                    mydb.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                       vapp_id=vapp_id)
 
                     print "created instance successfully"
             time.sleep(100)
 
 
-    def end_time_trigger(self):
+    def end_time_trigger(self, mydb):
+
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
                                                   url_admin="", user="admin", passwd="stack")
         reservations = sh_reservation()
+        print "end_time_trigger process is running"
         while True:
-            rsvs = reservations.list_all_created_rsv()
+            rsvs = reservations.list_all_created_rsv(mydb)
             for rsv in rsvs:
                 print rsv
-                start_time = rsv['end_time']
+                end_time = rsv['end_time']
                 vapp_id = rsv['instance_id']
                 reservation_id = rsv['reservation_id']
-                if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
+                if (abs(end_time - datetime.datetime.now()) <= datetime.timedelta(minutes=1)):
                     nproject.delete_vapp(vapp_id)
                     time.sleep(3)
-                    reservations.delete_reservation(reservation_id=reservation_id)
+                    reservations.delete_reservation(mydb=mydb, reservation_id=reservation_id)
                     break
                     #return result, reservation_id
             time.sleep(2)
+
 
 '''
 This class is implemented for interacting with openstack (VIM)
@@ -294,11 +297,9 @@ class vimconnector(vimconn.vimconnector):
             Returns >=0, the instance identifier
                 <0, error_text
         '''
-
         if self.debug:
             print "osconnector: Creating VM into VIM"
            # print "   image %s  flavor %s   nics=%s" %(image_id, flavor_id,net_list)
-
 
             self._reload_connection_tenant(project_id)
             image = self.nova.images.find(id=image_id)
@@ -323,7 +324,6 @@ class vimconnector(vimconn.vimconnector):
           #  print tenant_id + " " + mgnt_network_id + " " +  ctrl_network_id + " " + " " + EMA_iid
             self._reload_connection()
 
-
             self.nova.servers.delete(vapp_id)
             time.sleep(7)
            # subnetm = self.neutron.list_subnets(network_id = mgnt_network_id)['subnets'][0]
@@ -332,10 +332,7 @@ class vimconnector(vimconn.vimconnector):
             #self.neutron.remove_gateway_router(router['id'])
             #self.neutron.delete_router(router_id)
 
-
             #self.neutron.delete_network(mgnt_network_id)
-
-
 
             #self.keystone.tenants.add_user(self.k_creds["username"], #role)
             return 200, vapp_id
@@ -350,7 +347,6 @@ class vimconnector(vimconn.vimconnector):
         if self.debug:
             print "delete_tenant " + error_text
         return error_value, error_text
-
 
 
     def get_tenant_vminstance(self,vm_id):
@@ -374,42 +370,10 @@ class vimconnector(vimconn.vimconnector):
             print "get_tenant_vminstance" + error_text
         return error_value, error_text
 
-
-
-def main_loop():
-    # while 1:
-
-        #run two functions in parallel like two threads
-        # commands = ['start_vnf.start_time_trigger', 'start_vnf.end_time_trigger']
-        # parallelpy.run(commands=commands)
-
-    start_vnf = sh_control()
-    p1 = Process(target=start_vnf.start_time_trigger)
-    p1.start()
-    print 'p1 started '
-    p2 = Process(target=start_vnf.end_time_trigger)
-    p2.start()
-    print 'p2 started'
-    p1.join()
-    print 'p1 joined'
-    p2.join()
-    print 'p2 joined'
-
-if __name__ == '__main__':
-    sh_rsv = sh_reservation()
-    create_rsv = sh_rsv.create_reservation(data=data)
-    if create_rsv > 0:
-        try:
-
-            # db = resource_db.resource_db()
-            # a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-            main_loop()
-
-        except KeyboardInterrupt:
-            print >> sys.stderr, '\nExiting by user request.\n'
-            sys.exit(0)
-
-        # test = sh_reservation()
-        # test.connect_db()
-
-
+# def get_connect_db():
+#     mydb = resource_db.resource_db()
+#     print mydb
+#     if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+#         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
+#         exit(-1)
+#     return mydb
