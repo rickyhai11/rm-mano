@@ -336,7 +336,7 @@ class resource_db():
     ####################################################################################################################
     '''
     # re-use common adding data to db function for adding new row into db table
-        def add_row_rs(self, table_name, row_dict)
+    def add_row_rs(self, table_name, row_dict)
     '''
     def update_row_capacity_by_uuid(self, table_name, uuid, new_values_dict):
         '''

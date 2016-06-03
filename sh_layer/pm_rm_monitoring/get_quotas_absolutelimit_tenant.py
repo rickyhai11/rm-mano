@@ -83,3 +83,60 @@ def read_callback():
 
 collectd.register_config(configure_callback)
 collectd.register_read(read_callback, plugin.interval)
+
+
+
+def get_instance_details(p_nova_client):
+    instanceList    = p_nova_client.servers.list()
+    floatIpList     = p_nova_client.floating_ips.list()
+
+    cnt_instances               = len(instanceList)
+    cnt_instances_active        = 0
+    cnt_vcpu                    = 0
+    cnt_vcpu_active             = 0
+    cnt_ram                     = 0
+    cnt_ram_active              = 0
+    cnt_disk                    = 0
+    cnt_ephemeral               = 0
+    cnt_floatip                 = len(floatIpList)
+    cnt_floatip_disassociated   = 0
+
+
+    for inst in instanceList:
+        t_inst_flav = inst.flavor['id']
+
+        flavor = p_nova_client.flavors.get(t_inst_flav)
+        t_inst_vcpu = flavor.vcpus
+        t_inst_ram  = flavor.ram
+        t_inst_disk = flavor.disk
+        t_inst_ephemeral = flavor.ephemeral
+
+        cnt_vcpu = cnt_vcpu + t_inst_vcpu
+        cnt_ram  = cnt_ram + t_inst_ram
+        cnt_disk = cnt_disk + t_inst_disk
+        cnt_ephemeral = cnt_ephemeral + t_inst_ephemeral
+
+        if inst.status == "ACTIVE":
+            cnt_instances_active = cnt_instances_active + 1
+            cnt_vcpu_active = cnt_vcpu_active + t_inst_vcpu
+            cnt_ram_active = cnt_ram_active + t_inst_ram
+
+    for floatip in floatIpList:
+        if floatip.instance_id == None:
+            cnt_floatip_disassociated = cnt_floatip_disassociated + 1
+
+    summary = {}
+    summary['total_instances'] = cnt_instances
+    summary['total_instances_active'] = cnt_instances_active
+    summary['total_vcpu']   = cnt_vcpu
+    summary['total_vcpu_active'] = cnt_vcpu_active
+
+    summary['total_ram']    = cnt_ram
+    summary['total_ram_active'] = cnt_ram_active
+
+    summary['total_disk']   = cnt_disk
+    summary['total_ephemeral'] = cnt_ephemeral
+    summary['total_floatingip_allocated'] = cnt_floatip
+    summary['total_floatingip_disassocated'] = cnt_floatip_disassociated
+
+    return summary

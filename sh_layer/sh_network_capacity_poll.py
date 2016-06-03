@@ -13,7 +13,7 @@ config = {
     'AUTH_URL': "http://223.194.33.59:5000/v2.0/",
     'USERNAME': "admin",
     'PASSWORD' : "stack",
-    'TENANT_ID' : "4abaaa5e2e9248abafa7234709b6f654",
+    'TENANT_ID' : "c1bb85f009f647139c767eeaaba3d258",
     'TENANT_NAME' : 'admin',
     'public_network' : 'public'
     }
@@ -38,10 +38,11 @@ class op_networks_capacity():
         stats = {}
         self.last_stats = int(mktime(datetime.now().timetuple()))
         kwargs = {'retrieve_all': True, 'fields': 'id'}
-        stats['networks'] = [ len(self.neutron_client.list_networks(**kwargs)['networks']) ]
-        stats['ports'] = [ len(self.neutron_client.list_ports(**kwargs)["ports"]) ]
-        stats['routers'] = [ len(self.neutron_client.list_routers(**kwargs)["routers"]) ]
-        stats['floatingips_usage'] = [ len(self.neutron_client.list_floatingips(**kwargs)['floatingips']) ]
+        stats['networks'] = [len(self.neutron_client.list_networks(**kwargs)['networks'])]
+        stats['ports'] = [len(self.neutron_client.list_ports(**kwargs)["ports"])]
+        stats['routers'] = [len(self.neutron_client.list_routers(**kwargs)["routers"])]
+        stats['floatingips_total'] = [self._estimate_total_ip()]
+        stats['floatingips_usage'] = [len(self.neutron_client.list_floatingips(**kwargs)['floatingips'])] #TODO need to implement to indentify clearly which floating IP is allocated omly and associated or disassociated Provide 'floatingips_usage': [1, 250.00000000023283] with list format [allocated floatingIP, total floating ip ]
         stats['floatingips_available'] = [self._estimate_total_ip() - int(stats['floatingips_usage'][0])]
         if self.public_network:
             total_ip = self._estimate_total_ip()
@@ -53,7 +54,7 @@ class op_networks_capacity():
         for router in self.neutron_client.list_routers()['routers']:
             if router['external_gateway_info'] and router['external_gateway_info']['enable_snat']:
                 snat += 1
-        stats['snat_external_gateway'] = [ snat ]
+        stats['snat_external_gateway'] = [snat]
 
         return stats
 
@@ -84,7 +85,7 @@ class op_networks_capacity():
                 ips_number -= 1
             ips_number -= 2
             total_ip += ips_number
-        print "total number of floating IP: %d " % total_ip
+        #print "total number of floating IP: %d " % total_ip
         return total_ip
     
     
@@ -93,7 +94,8 @@ def connect(config):
     # https://github.com/openstack/python-neutronclient/blob/752423483304572f00dacfcffce35a268fa3e5d4/neutronclient/client.py#L180
     neutron_client = neutron.Client('2.0',
                                     username=config['USERNAME'],
-                                    tenant_id=config['TENANT_ID'],
+                                    # tenant_id=config['TENANT_ID'],
+                                    tenant_name=config['TENANT_NAME'],
                                     password=config['PASSWORD'],
                                     auth_url=config['AUTH_URL'])
     kwargs = {'retrieve_all': True, 'fields': 'id'}
@@ -109,14 +111,25 @@ def connect(config):
 if __name__ == '__main__': 
     neutron_client  = connect(config)
     dat = op_networks_capacity(neutron_client,public_network= 'public')
-    print dat.get_stats()
-    kwargs = {'retrieve_all': True, 'fields': 'id'}
-    print neutron_client.list_networks()
-    print neutron_client.list_ports()
-    print neutron_client.list_routers()
-    print neutron_client.list_floatingips()
-    print neutron_client.list_extensions()
-    #print neutron_client.list_vips()
-    print neutron_client.list_pools()
-    print neutron_client.list_routers()
-    print neutron_client.list_subnets()
+    # print dat.get_stats()
+    #kwargs = {'retrieve_all': True, 'fields': 'id'}
+    # kwargs = {'retrieve_all': True, 'fields': ['id', 'status']}
+    # kwargs = {'retrieve_all': True, 'fields': ['id', 'tenant_id','floating_ip_address','floating_network_id','status', 'router_id', 'port_id', 'fixed_ip_address']}
+    kwargs_router = {'retrieve_all': True, 'fields': ['name', 'id', 'tenant_id', 'external_gateway_info']}
+    # net= neutron_client.list_networks()['networks']
+    # for network in net:
+    #     print network['name'], network['id']
+
+
+    # print neutron_client.list_ports()
+    print neutron_client.list_routers(**kwargs_router)['routers']
+    # print neutron_client.list_floatingips()
+    # print neutron_client.list_floatingips(**kwargs)['floatingips']
+    print  neutron_client.list_quotas()['quotas']
+
+    # print neutron_client.list_extensions()
+    # print neutron_client.list_vips()
+    # print neutron_client.list_pools()
+    # print neutron_client.list_routers()
+    # print neutron_client.list_subnets()
+

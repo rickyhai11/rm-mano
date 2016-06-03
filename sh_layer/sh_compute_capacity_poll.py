@@ -13,7 +13,7 @@ config = {
     'AUTH_URL': "http://223.194.33.59:5000/v2.0/",
     'USERNAME': "admin",
     'PASSWORD': "stack",
-    'TENANT_ID': "cfcb18eef55b4b03bb075ea106fe771f",
+    'TENANT_ID': "c1bb85f009f647139c767eeaaba3d258",
     'TENANT_NAME': "admin",
     'SERVICE_TYPE': 'compute'}
 
@@ -151,8 +151,6 @@ def load_flavors_by_id(flavor_id):
             print("-"*35)
             return 0
     # print flavor_detail
-
-
 
 
 if __name__ == '__main__':
