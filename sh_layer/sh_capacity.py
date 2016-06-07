@@ -155,8 +155,6 @@ def __str2db_format(data):
 if __name__ == '__main__':
     check_resource_capacity()
 
-
-
 #
 # def initialize_compute_rs_capacity_into_db(table_name):
 #         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -206,8 +204,6 @@ if __name__ == '__main__':
 #         return result
 #     else:
 #         print "failed to initialize vdisk capacity value into DB"
-
-
 
 #*********************************************
 #   NOVA
