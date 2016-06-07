@@ -12,6 +12,8 @@ import swiftclient.client as swiftclient
 import collections
 import re
 
+from keystoneauth1.identity import v2
+from keystoneauth1 import session
 
 from sh_layer import vimconn
 from sh_layer import vimconn_openstack
@@ -29,6 +31,8 @@ os_username = 'admin'
 os_password = 'stack'
 os_auth_url = 'http://223.194.33.59:5000/v2.0/'
 _debug = False
+# new para
+os_url = 'http://223.194.33.59:35357/v2.0'
 
 
 #Static flavors list
@@ -97,15 +101,37 @@ def get_keystone_client():
     creds = get_keystone_creds()
     return keystoneclient.Client(**creds)
 
-#trial get keystone function for debuging get_users_per_tenant_details() function with tenants.list_users(tenant.id)
-# def get_keystone():
-#     """Returns a Keystone.Client instance."""
-#     return KeystoneClient(username=os_username, password=os_password,
-#             tenant_name=os_tenant, auth_url=os_auth_url)
+#
+# get keystone function which is used in get_users_per_tenant_details() function to call
+# "tenants.list_users(tenant.id)"
+#
+def get_keystone(p_tenant_name):
+    """Returns a Keystone.Client instance."""
+    auth = v2.Password(username=os_username, password=os_password,
+                  tenant_name=p_tenant_name, auth_url=os_auth_url)
+    sess = session.Session(auth=auth)
+    keystone = keystoneclient.Client(session=sess)
+    # print keystone.tenants.list_users('a2f35a11a77e4286af46c8c0b3fcd2d3')
+    return keystone
 
-def get_token_keystone():
-    token = get_keystone_client().auth_token
-    return token
+# --
+# def get_token():
+#     auth = v2.Password(auth_url=os_auth_url, username=os_username, password=os_password, tenant_name='admin')
+#     sess = session.Session(auth=auth, verify=False)
+#     token = auth.get_token(sess)
+#     print token
+#     return token
+#
+# --
+# def new_get_token_keystone():
+#     token_admin = get_token()
+#     auth = v2.Token(auth_url=os_url, token=token_admin)
+#     sess = session.Session(auth=auth)
+#     keystone= keystoneclient.Client(session=sess)
+#     print keystone
+#     print keystone.tenants.list()
+#     return keystone
+
 
 def get_swift_client(p_tenant_name):
     return swiftclient.Connection(authurl=os_auth_url, user=os_username, key=os_password, tenant_name=p_tenant_name, auth_version='2')
@@ -137,22 +163,19 @@ def get_flavor_count(p_nova_client):
     return cnt_inst_flavor_distribution
 
 # --
-# get_instance_details()
-# Returns vpcu, vmem, disk, floatingIP for a given tenant
+# get_users_per_tenant_details()
+# Returns number of users and list users for a given tenant, to get correctly keystone client for counting list users
+# need to call get_keystone(p_tenant_name) instead of get_keystone_client() as usual
 #
-def get_users_per_tenant_details():
+def get_users_per_tenant_details(p_keystone_client):
     """Retrieves stats from keystone"""
-    keystone= get_keystone_client()
-    print keystone
-    tenantlist = keystone.tenants.list()
-
-    print tenantlist
+    # get keystone client from get_keystone(p_tenant_name) function which have 'power'
+    # to fully access keystone functions in lib
+    # Count number of users in a tenant
+    tenantlist = p_keystone_client.tenants.list()
     for tenant in tenantlist:
-        print tenant.name
-        # t_users_cnt = len(keystone.tenants.list_users(tenant.id))
-        t_users_list = keystone.users.list()
-        print t_users_list
-
+        t_users_cnt = len(p_keystone_client.tenants.list_users(tenant.id))
+        t_users_list = p_keystone_client.tenants.list_users(tenant.id)
     # return data
 
 # --
@@ -541,7 +564,7 @@ def get_all_tenant_utilization():
     if _debug == True:
         print '[+] Crunching utilization stats for all tenants ...'
 
-    aggr_users_prov = 0
+    aggr_users_cnt = 0
     aggr_inst_prov = 0
     aggr_inst_active = 0
     aggr_vcpu_prov = 0
@@ -590,8 +613,8 @@ def get_all_tenant_utilization():
         # Skip disabled tenants
         if tenant.enabled == False:
             t_tenant_name           = tenant.name
-            # t_users_cnt             = 'disabled'
-            # t_users_list            = 'disabled'
+            t_users_cnt             = 'disabled'
+            t_users_list            = 'disabled'
             t_instances             = 'disabled'
             t_instances_active      = 'disabled'
             t_vcpu                  = 'disabled'
@@ -632,9 +655,13 @@ def get_all_tenant_utilization():
 
 
         else :
-            # User count per active tenant
-            # t_users_cnt = len(keystone.tenants.list_users(tenant.id))
-            # t_users_list = keystone.tenants.list_users(tenant.id)
+            # get keystone client from get_keystone(p_tenant_name) function which have 'power'
+            # to fully access keystone functions in lib
+            t_keystone = get_keystone(tenant.name)
+            t_users_cnt = len(t_keystone.tenants.list_users(tenant.id))
+            t_users_list = t_keystone.tenants.list_users(tenant.id)
+            print " user list"
+            print t_users_list
 
             nova = get_nova_client(tenant.name)
             cinder = get_cinder_client(tenant.name)
@@ -648,8 +675,8 @@ def get_all_tenant_utilization():
             # print neutron_summary
 
             t_tenant_name               = tenant.name
-            # t_users_cnt                 = t_users_cnt
-            # t_users_list                = t_users_list
+            t_users_cnt                 = t_users_cnt
+            t_users_list                = t_users_list
             t_instances                 = compute_summary['total_instances']
             t_instances_active          = compute_summary['total_instances_active']
             t_vcpu                      = compute_summary['total_vcpu']
@@ -690,6 +717,7 @@ def get_all_tenant_utilization():
 
 
             # For calculate total resources in whole tenants
+            aggr_users_cnt              = aggr_users_cnt + t_users_cnt
             aggr_inst_prov              = aggr_inst_prov + t_instances
             aggr_inst_active            = aggr_inst_active + t_instances_active
             aggr_vcpu_prov              = aggr_vcpu_prov + t_vcpu
@@ -735,6 +763,8 @@ def get_all_tenant_utilization():
         # Inst_Prov,Inst_Active,VCPU_Prov,VCPU_Active,RAM_Prov,RAM_Active,Disk_Prov_GB,FloatIP_Alloc,FloatIP_Disassoc,Vols_Prov,Vols_Prov_GB,Object_Containers,Object_Count,Object_Storage_Used_GB"
         # k,v where k becomes header
         d[t_tenant_name] = {
+            'Users_count'           : t_users_cnt,
+            'Users_list'            : t_users_list,
             'Inst_Prov'             : t_instances,
             'Inst_Active'           : t_instances_active,
             'VCPU_Prov'             : t_vcpu,
@@ -778,7 +808,9 @@ def get_all_tenant_utilization():
         if _debug == True:
             print " [-] %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
             %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
-                  %s, %s, %s, %s, %s, %s, %s, %s" % (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % (
+                    t_users_cnt,
+                    t_users_list,
                     t_tenant_name,
                     t_instances,
                     t_instances_active,
@@ -822,7 +854,8 @@ def get_all_tenant_utilization():
     # Print Aggregates
     if _debug == True:
         print " [-] Total,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s," \
-              "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+              "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+                aggr_users_cnt,
                 aggr_inst_prov,
                 aggr_inst_active,
                 aggr_vcpu_prov,
@@ -860,6 +893,7 @@ def get_all_tenant_utilization():
 
     # Adding aggregates at the end of ordered dict
     d['_Total'] = {
+            'Users_count'       : aggr_users_cnt,
             'Inst_Prov'         : aggr_inst_prov,
             'Inst_Active'       : aggr_inst_active,
             'VCPU_Prov'         : aggr_vcpu_prov,
@@ -1146,16 +1180,22 @@ def csv_report(d_report,l_header,file_name):
 #         ]
 #         # Write header + report to target
 #         csv_report(report,report_headers,output_file)
+def go_main():
+    return 0
 
 if __name__ == "__main__":
     data = get_all_tenant_utilization()
-    print data
-    flavors = get_all_tenant_flavorcount()
-    print flavors
-    limit = get_quotas_limit_details()
-    print limit
-    print get_hypervisor_all_compute_utilization()
 
-    # get_users_per_tenant_details()
+    # data = get_all_tenant_flavorcount()
+    # data = get_quotas_limit_details()
+    # print data
 
-
+    attributes = data['admin']['Networks_Attributes']  #get tenant from tenant table nhe
+    print attributes
+    print attributes[0]#['status']
+    #
+    # # get_users_per_tenant_details()
+    #
+    # # print get_hypervisor_all_compute_utilization()
+    #
+    # get_keystone('demo')

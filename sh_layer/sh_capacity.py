@@ -16,26 +16,25 @@ def check_resource_capacity(mydb, rsv):
     retrval = True
 
     reserved_rs = calculate_reserved_compute_rs_by_flavor(rsv)
-    print "Total reserved resources:"
-    print reserved_rs
+    # print "Total reserved resources:"
+    # print reserved_rs
     for table_name in list_capacity_tables:
         current_rs_capacity, uuid = get_current_available_resource(mydb=mydb, table_name=table_name)
         # print "current_rs_capacity"
         # print current_rs_capacity
 
-
         if table_name == 'vcpu_capacity' and reserved_rs['vcpu_reserved'] >= current_rs_capacity['vcpu_available']:
-            print "Request is rejected due to lack of resources. Resources request for %s is not satisfied." %table_name
+            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table_name, table_name)
             retrval = False
             break
 
         elif table_name == 'vmem_capacity' and reserved_rs['vmem_reserved'] >= current_rs_capacity['vmem_available']:
-            print "Request is rejected due to lack of resources. Resources request for %s is not satisfied." %table_name
+            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table_name, table_name)
             retrval = False
             break
 
         elif table_name == 'vdisk_capacity' and reserved_rs['disk_reserved'] >= current_rs_capacity['disk_available']:
-            print "Request is rejected due to lack of resources. Resources request for %s is not satisfied." %table_name
+            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table_name, table_name)
             retrval = False
             break
 
@@ -82,7 +81,7 @@ def calculate_reserved_compute_rs_by_flavor(rsv):
     flavor_id = rsv['flavor_id']
     number_instances = int(rsv['number_instance'])
     flavor_detail = load_flavors_by_id(flavor_id=flavor_id)
-    print flavor_detail
+    # print flavor_detail
     if number_instances == 1:
         reserved_rs_dict['vcpu_reserved'] = flavor_detail['vcpu']
         reserved_rs_dict['vmem_reserved'] = flavor_detail['vmem']
@@ -97,6 +96,7 @@ def calculate_reserved_compute_rs_by_flavor(rsv):
         reserved_rs_dict['vcpu_reserved'] = flavor_detail['vcpu']
         reserved_rs_dict['vmem_reserved'] = flavor_detail['vmem']
         reserved_rs_dict['disk_reserved'] = flavor_detail['vdisk']
+        print reserved_rs_dict
         return reserved_rs_dict
     else:
         print "number of instance should be equal or greater than 1 or it is not in correct format"

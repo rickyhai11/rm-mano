@@ -17,8 +17,8 @@ global_config = {'db_host': 'localhost',
                   'db_name': 'rm_db'
                  }
 global data
-data = {'reservation_id': '67810',
-        'label': 'test3',
+data = {'reservation_id': '67819',
+        'label': 'test4',
         'host_id': "12212817268DJKHSAJD",
         'host_name': 'hai_compute',
         'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
