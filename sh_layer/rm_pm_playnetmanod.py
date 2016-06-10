@@ -28,7 +28,7 @@ data = {'reservation_id': '67819',
         'start_time': '2016-05-23 18:04:00',
         'end_time': '2016-05-23 18:09:00',
         'flavor_id': 1,
-        'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
+        'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
         'number_instance': '1',
         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)

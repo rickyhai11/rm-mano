@@ -46,10 +46,10 @@ def check_resource_capacity(mydb, rsv):
             new_rs_capacity = current_rs_capacity
 
             if table_name == 'vcpu_capacity' and retrval:
-                print retrval
+                # print retrval
                 new_rs_capacity['vcpu_available'] = int(current_rs_capacity['vcpu_available']) - int(reserved_rs['vcpu_reserved'])
                 new_rs_capacity['vcpu_reserved'] = int(reserved_rs['vcpu_reserved'])
-                print "new_rs_capacity da nhay vao trong checked owr vcpu capacity"
+                # print "new_rs_capacity da nhay vao trong checked owr vcpu capacity"
                 print new_rs_capacity
                 mydb.update_row_capacity_by_uuid(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
                 retrval = True
@@ -86,7 +86,8 @@ def calculate_reserved_compute_rs_by_flavor(rsv):
         reserved_rs_dict['vcpu_reserved'] = flavor_detail['vcpu']
         reserved_rs_dict['vmem_reserved'] = flavor_detail['vmem']
         reserved_rs_dict['disk_reserved'] = flavor_detail['vdisk']
-        print reserved_rs_dict
+        print "Reserved resource based required: %s" % reserved_rs_dict
+        # print reserved_rs_dict
         return reserved_rs_dict
 
     elif number_instances > 1:
@@ -133,7 +134,7 @@ def get_current_available_resource(mydb, table_name):
         # in this case we have override existing db record, hence in capacity tables just have only one record at a moment
         for row in rows: #currently just have only one row record in capacity tables. Hence, rows = row =1
             current_capacity_data = row
-            print "print row at get_current_available_resource function"
+            print "Calculated resource usage --> Updating to DB..."
             print row
         return current_capacity_data, current_capacity_data['uuid']
 

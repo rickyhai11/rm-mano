@@ -993,6 +993,7 @@ def all_vdisk_cap():
     return vdisk_capactity
 
 
+
 # --
 # Get absolute limits details for a tenant
 #
@@ -1027,6 +1028,7 @@ def get_quotas_limit_details():
 
             nova = get_nova_client(tenant.name)
             neutron = get_neutron_client(tenant.name)
+            cinder = get_cinder_client(tenant.name)
             t_tenant_name = tenant.name
 
             #=====================================================================================================
@@ -1070,7 +1072,28 @@ def get_quotas_limit_details():
 
 
             #TODO """Retrieves stats from Cinder"""
+            #=====================================================================================================
+            # Quotas Networks
+            #=====================================================================================================
+            """Retrieves tenant quotas from cinder- Cinder API v2"""
+            d[t_tenant_name] = {
+                'tenant_id': tenant.id,
+                'quotas_cinder': {},
+                'limits_cinder': {},
+                'volume': {'count': 0, 'byte': 0}
+                'volume_snapshots':{'count': 0, 'byte': 0}
+            }
+            # Get cinder-absolute limits for tenant
+            try:
+                limits_cinder = cinder.limits.get().absolute
+            except Exception:
+                continue
+            for limit_cinder in limits_cinder:
+                if 'Giga' in limit_cinder.name:
+                    limit_cinder.value = limit_cinder.value * 1024 * 1024 * 1024
+                d[t_tenant_name]['limits_cinder'][limit_cinder.name] = limit_cinder.value
 
+            # get cinder-tenant quotas
 
             #TODO """Retrieves stats from Swift"""
 

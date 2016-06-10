@@ -27,7 +27,7 @@ class polling_op_compute_capacity():
         data = nova_client.hypervisor_stats.statistics()._info
         vcpu_allocation_ratio = 1
         memory_allocation_ratio = 1
-        print data
+        # print data
         return {
             'servers': [data['count'], data['current_workload']],
             'vdisk_capacity': {
@@ -155,7 +155,9 @@ def load_flavors_by_id(flavor_id):
 
 if __name__ == '__main__':
     print vdisk_op_stats()
-    load_flavors_by_id(flavor_id=1)
+    print vcpu_op_stats()
+    print vdisk_op_stats()
+    # load_flavors_by_id(flavor_id=1)
 
 
         
