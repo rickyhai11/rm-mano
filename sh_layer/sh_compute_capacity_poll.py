@@ -10,10 +10,10 @@ from time import mktime
 global config 
 config = {
     'VERSION': '2',
-    'AUTH_URL': "http://223.194.33.59:5000/v2.0/",
+    'AUTH_URL': "http://116.89.184.94:5000/v2.0/",
     'USERNAME': "admin",
-    'PASSWORD': "stack",
-    'TENANT_ID': "c1bb85f009f647139c767eeaaba3d258",
+    'PASSWORD': "fncp2015",
+    'TENANT_ID': "1975c8ee1c7c4229bdd909ad662fcbe6",
     'TENANT_NAME': "admin",
     'SERVICE_TYPE': 'compute'}
 

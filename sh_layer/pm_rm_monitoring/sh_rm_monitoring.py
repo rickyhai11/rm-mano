@@ -28,11 +28,11 @@ sys.setdefaultencoding("utf-8")
 # All Globals should be defined here
 #
 os_username = 'admin'
-os_password = 'stack'
-os_auth_url = 'http://223.194.33.59:5000/v2.0/'
+os_password = 'fncp2015'
+os_auth_url = 'http://129.254.39.208:5000/v2.0/'
 _debug = False
 # new para
-os_url = 'http://223.194.33.59:35357/v2.0'
+os_url = 'http://129.254.39.208:35357/v2.0'
 
 
 #Static flavors list
