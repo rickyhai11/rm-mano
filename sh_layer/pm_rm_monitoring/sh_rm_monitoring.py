@@ -993,7 +993,6 @@ def all_vdisk_cap():
     return vdisk_capactity
 
 
-
 # --
 # Get absolute limits details for a tenant
 #
