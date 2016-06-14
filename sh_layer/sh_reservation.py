@@ -72,7 +72,7 @@ class sh_reservation():
                 print "created reservation successfully "
                 return result
         else:
-            print 'checking resources error'
+            print 'Resources error occurred: resources are exhausted. Please recheck'
 
     def delete_reservation(self, mydb, reservation_id):
         #rdb_ = rdb.resource_db()
