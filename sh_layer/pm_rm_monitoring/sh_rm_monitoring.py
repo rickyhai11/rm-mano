@@ -4,13 +4,15 @@
 import os
 import sys
 import csv
+import collections
+import re
+import json
+
 from novaclient import client as novaclient
 from neutronclient.neutron import client as neutronclient
 import cinderclient.v1.client as cinderclient
 import keystoneclient.v2_0.client as keystoneclient
 import swiftclient.client as swiftclient
-import collections
-import re
 
 from keystoneauth1.identity import v2
 from keystoneauth1 import session
@@ -452,14 +454,22 @@ def _estimate_total_ip(p_neutron_client):
 #
 def get_volume_details(p_cinder_client):
     volumelist = p_cinder_client.volumes.list()
+    snapshotlist = p_cinder_client.volume_snapshots.list()
     total_provisioned = 0
-
+    total_volume_snapshots_cnt = 0
+    total_volume_snapshots_provisioned = 0
     for volumes in volumelist:
-        total_provisioned = total_provisioned + volumes.size
+        total_provisioned = total_provisioned + volumes.size  # (volumes.size * 1024 * 1024 * 1024)
+
+    for snapshot in snapshotlist:
+        total_volume_snapshots_provisioned = total_volume_snapshots_cnt + snapshot.size # (snapshot.size * 1024 * 1024 * 1024)
+
 
     summary = {}
     summary['total_vols_count'] = len(volumelist)
     summary['total_vols_provisioned_capacity'] = total_provisioned
+    summary['total_snapshots_count'] = len(snapshotlist)
+    summary['total_snapshots_provisioned_capacity'] = total_volume_snapshots_provisioned
     return summary
 
 
@@ -574,8 +584,10 @@ def get_all_tenant_utilization():
     aggr_disk_prov = 0
     aggr_floatip_alloc = 0
     aggr_floatip_disassoc = 0
-    aggr_persist_volcount       = 0
-    aggr_persist_provisioned    = 0
+    aggr_persist_vol_count       = 0
+    aggr_persist_provisioned_vol_value  = 0
+    aggr_persist_snapshot_count  = 0
+    aggr_persist_provisoned_snapshots_value  = 0
     aggr_container_count    = 0
     aggr_object_count = 0
     aggr_object_storage_used = 0
@@ -625,7 +637,9 @@ def get_all_tenant_utilization():
             t_float_allocated       = 'disabled'
             t_float_disassociated   = 'disabled'
             t_persist_volcount      = 'disabled'
-            t_persist_provisioned   = 'disabled'
+            t_persist_provisioned_vol_value         = 'disabled'
+            t_persist_snapshot_count                = 'disabled'
+            t_persist_provisioned_snapshot_value   = 'disabled'
             t_container_count       = 'disabled'
             t_object_count          = 'disabled'
             t_object_storage_used   = 'disabled'
@@ -687,7 +701,9 @@ def get_all_tenant_utilization():
             t_float_allocated           = compute_summary['total_floatingip_allocated']
             t_float_disassociated       = compute_summary['total_floatingip_disassocated']
             t_persist_volcount          = storage_summary['total_vols_count']
-            t_persist_provisioned       = storage_summary['total_vols_provisioned_capacity']
+            t_persist_provisioned_vol_value       = storage_summary['total_vols_provisioned_capacity']
+            t_persist_snapshot_count       = storage_summary['total_snapshots_count']
+            t_persist_provisioned_snapshot_value       = storage_summary['total_snapshots_provisioned_capacity']
             t_container_count           = object_summary['total_container_count']
             t_object_count              = object_summary['total_object_count']
             t_object_storage_used       = object_summary['total_object_storage_used']
@@ -727,9 +743,10 @@ def get_all_tenant_utilization():
             aggr_disk_prov              = aggr_disk_prov + t_disk_ephemeral
             aggr_floatip_alloc          = aggr_floatip_alloc + t_float_allocated
             aggr_floatip_disassoc       = aggr_floatip_disassoc + t_float_disassociated
-            aggr_persist_volcount       = aggr_persist_volcount + t_persist_volcount
-            aggr_persist_provisioned    = aggr_persist_provisioned + t_persist_provisioned
-            aggr_container_count        = aggr_container_count + t_container_count
+            aggr_persist_vol_count       = aggr_persist_vol_count + t_persist_volcount
+            aggr_persist_provisioned_vol_value    = aggr_persist_provisioned_vol_value + t_persist_provisioned_vol_value
+            aggr_persist_snapshot_count    = aggr_persist_snapshot_count + t_persist_snapshot_count
+            aggr_persist_provisoned_snapshots_value    = aggr_persist_provisoned_snapshots_value + t_persist_provisioned_snapshot_value
             aggr_object_count           = aggr_object_count + t_object_count
             aggr_object_storage_used    = aggr_object_storage_used + t_object_storage_used
 
@@ -775,7 +792,9 @@ def get_all_tenant_utilization():
             'FloatIP_Alloc'         : t_float_allocated,
             'FloatIP_Disassoc'      : t_float_disassociated,
             'Vols_Prov'             : t_persist_volcount,
-            'Vols_Prov_GB'          : t_persist_provisioned,
+            'Vols_Prov_GB'          : t_persist_provisioned_vol_value,
+            'Snapshot_Prov'         : t_persist_snapshot_count,
+            'Snapshot_Prov_GB'      : t_persist_provisioned_snapshot_value,
             'Object_Containers'     : t_container_count,
             'Object_Count'          : t_object_count,
             'Object_Storage_Used_GB': t_object_storage_used,
@@ -808,7 +827,7 @@ def get_all_tenant_utilization():
         if _debug == True:
             print " [-] %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
             %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
-                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % (
                     t_users_cnt,
                     t_users_list,
                     t_tenant_name,
@@ -822,7 +841,9 @@ def get_all_tenant_utilization():
                     t_float_allocated,
                     t_float_disassociated,
                     t_persist_volcount,
-                    t_persist_provisioned,
+                    t_persist_provisioned_vol_value,
+                    t_persist_snapshot_count,
+                    t_persist_provisioned_snapshot_value,
                     t_container_count,
                     t_object_count,
                     t_object_storage_used,
@@ -854,7 +875,7 @@ def get_all_tenant_utilization():
     # Print Aggregates
     if _debug == True:
         print " [-] Total,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s," \
-              "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
+              "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s, %s" % (
                 aggr_users_cnt,
                 aggr_inst_prov,
                 aggr_inst_active,
@@ -865,8 +886,10 @@ def get_all_tenant_utilization():
                 aggr_disk_prov,
                 aggr_floatip_alloc,
                 aggr_floatip_disassoc,
-                aggr_persist_volcount,
-                aggr_persist_provisioned,
+                aggr_persist_vol_count,
+                aggr_persist_provisioned_vol_value,
+                aggr_persist_snapshot_count,
+                aggr_persist_provisoned_snapshots_value,
                 aggr_container_count,
                 aggr_object_count,
                 aggr_object_storage_used,
@@ -903,8 +926,10 @@ def get_all_tenant_utilization():
             'Disk_Prov_GB'      : aggr_disk_prov,
             'FloatIP_Alloc'     : aggr_floatip_alloc,
             'FloatIP_Disassoc'  : aggr_floatip_disassoc,
-            'Vols_Prov'         : aggr_persist_volcount,
-            'Vols_Prov_GB'      : aggr_persist_provisioned,
+            'Vols_Prov'         : aggr_persist_vol_count,
+            'Vols_Prov_GB'      : aggr_persist_provisioned_vol_value,
+            'Snapshot_Prov'      : aggr_persist_snapshot_count,
+            'Snapshot_Prov_GB'      : aggr_persist_provisoned_snapshots_value,
             'Object_Containers' : aggr_container_count,
             'Object_Count'      : aggr_object_count,
             'Object_Storage_Used_GB': aggr_object_storage_used,
@@ -929,6 +954,153 @@ def get_all_tenant_utilization():
     }
 
     return d
+
+# --
+# Get absolute limits details for a tenant
+#
+def get_quotas_limit_details():
+    keystone = get_keystone_client()
+    tenantlist = keystone.tenants.list()
+
+    global _debug
+    if _debug:
+        print '[+] Crunching flavor stats for all tenants ...'
+
+    q = {}
+
+
+    for tenant in tenantlist:
+
+        if tenant.enabled == False:
+            t_tenant_name = tenant.name
+
+            q[t_tenant_name] = {
+                'm1.tiny'   : 'disabled',
+                'm1.small'  : 'disabled',
+                'm1.medium' : 'disabled',
+                'm1.large'  : 'disabled',
+                'm1.xlarge' : 'disabled',
+                'm1.2xlarge': 'disabled',
+                'm1.4xlarge': 'disabled',
+                'm1.8xlarge': 'disabled',
+                'custom'    : 'disabled',
+            }
+
+        else:
+
+            nova = get_nova_client(tenant.name)
+            neutron = get_neutron_client(tenant.name)
+            cinder = get_cinder_client(tenant.name)
+            t_tenant_name = tenant.name
+
+            #=====================================================================================================
+            # Quotas and limits Compute resources
+            #=====================================================================================================
+            """Retrieves quotas and limits for each of tenant from compute API"""
+            q[t_tenant_name] = {'limits_compute': {'tenant_id': tenant.id, 'tenant_name': tenant.name},
+                                'quotas_compute': {'tenant_id': tenant.id,'tenant_name': tenant.name},
+                                'quotas_networks': {'tenant_id': tenant.id,'tenant_name': tenant.name},
+                                'limits_cinder': {'tenant_id': tenant.id,'tenant_name': tenant.name},
+                                'quotas_cinder': {'tenant_id': tenant.id,'tenant_name': tenant.name}
+                                }
+
+            # Get Nova-absolute limits for tenant
+            limits = nova.limits.get(tenant_id=tenant.id).absolute
+            for limit in limits:
+                if 'ram' in limit.name.lower():
+                    limit.value = limit.value #* 1024.0 * 1024.0
+                q[t_tenant_name]['limits_compute'][limit.name] = limit.value
+            print "Limits of compute resources for all tenants are : %s" % (q[t_tenant_name]['limits_compute'])
+            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
+
+            # Nova Quotas for tenant
+            quotas = nova.quotas.get(tenant_id=tenant.id)
+            for item in ('cores', 'fixed_ips', 'floating_ips', 'instances',
+                'key_pairs', 'ram', 'security_groups','security_group_rules', 'server_groups', 'server_group_members'):
+                if item == 'ram':
+                    setattr(quotas, item, getattr(quotas, item)) #* 1024 * 1024)
+                q[t_tenant_name]['quotas_compute'][item] = getattr(quotas, item)
+            print "Quotas of compute resources are: %s" %( q[t_tenant_name]['quotas_compute'])
+            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
+
+
+            #=====================================================================================================
+            # Quotas Networks
+            #=====================================================================================================
+            """Retrieves tenant quotas from Neutron- Networks API"""
+            # get Networks-tenant quotas
+            # q[t_tenant_name] = {'quotas_networks': {'tenant_id': tenant.id,'tenant_name': tenant.name}}
+            quotas_networks = neutron.show_quota(tenant_id=tenant.id)['quota']
+            # for quota_network in quotas_networks:
+            # for item in ('floatingip', 'health_monitor' ,'subnetpool',
+            #       'member', 'network', 'port', 'router',
+            #       'security_group', 'security_group_rule', 'subnet', 'rbac_policy','pool'):
+            for item in ('subnet', 'network', 'floatingip', 'subnetpool', 'security_group_rule',
+                  'security_group', 'router', 'rbac_policy',  'port'):
+                q[t_tenant_name]['quotas_networks'][item] = quotas_networks[item]
+                # q[t_tenant_name]['quotas_networks'][item]=getattr(quotas_networks, item)
+            print "Quotas of networks are: %s" % (q[t_tenant_name]['quotas_networks'])
+            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
+
+
+            #TODO """Retrieves stats from Cinder"""
+            #=====================================================================================================
+            # Quotas Networks
+            #=====================================================================================================
+            """Retrieves tenant quotas from cinder- Cinder API v2"""
+            # q[t_tenant_name] = {
+            #     'quotas_cinder': {'tenant_id': tenant.id, "tenant_name": tenant.name},
+            #     'limits_cinder': {'tenant_id': tenant.id,'tenant_name': tenant.name}
+            #     # 'volume': {'count': 0, 'byte': 0},
+            #     # 'volume_snapshots': {'count': 0, 'byte': 0}
+            # }
+            # Get cinder-absolute limits for tenant
+            try:
+                limits_cinder = cinder.limits.get().absolute
+            except Exception:
+                continue
+            for limit_cinder in limits_cinder:
+                # if 'Giga' in limit_cinder.name:
+                #     limit_cinder.value = limit_cinder.value * 1024 * 1024 * 1024
+                q[t_tenant_name]['limits_cinder'][limit_cinder.name] = limit_cinder.value
+            print "Limits of cinder are: %s "% (q[t_tenant_name]['limits_cinder'])
+
+            # get cinder-tenant quotas
+            quotas_cinder = cinder.quotas.get(tenant_id=tenant.id, usage=True)
+            for item in ('backup_gigabytes', 'backups', 'gigabytes', 'gigabytes_lvmdriver-1',
+                'per_volume_gigabytes', 'snapshots', 'snapshots_lvmdriver-1','volumes', 'volumes_lvmdriver-1'):
+                # if 'Giga' in item:
+                #     setattr(quotas_cinder, item, getattr(quotas_cinder, item)) * 1024 * 1024 * 1024
+                q[t_tenant_name]['quotas_cinder'][item] = getattr(quotas_cinder, item)
+                # d[t_tenant_name]['quotas_cinder'][item] = quotas_cinder[item]
+            print "Storage Quota- Cinder are : %s" % q[t_tenant_name]['quotas_cinder']
+
+    return q
+
+# --
+# Get absolute limits details for a tenant
+#
+
+def get_dbformat_compute_quotas_from_op():
+    keystone = get_keystone_client()
+    tenantlist = keystone.tenants.list()
+
+    obj_quotas_compute = []
+    json_data = get_quotas_limit_details()
+
+    for tenant in tenantlist:
+        print tenant.name
+        json_quotas_compute = json_data[tenant.name]['quotas_compute']
+        obj_quotas_compute.append(json.dumps(json_quotas_compute, sort_keys=False).encode('utf-8'))
+    print "Print out obj_quotas_compute format-list of elements"
+    print obj_quotas_compute
+    return obj_quotas_compute
+
+
+
+#---------------------------------------------------------------------------------------------------------------------------
+# Get total capacity of compute resources from hyper-visor of compute node #TODO need to take into account multi-compute nodes scenario
+#---------------------------------------------------------------------------------------------------------------------------
 
 # --
 # get_hypervisor_total_compute_utilization()
@@ -993,110 +1165,6 @@ def all_vdisk_cap():
     return vdisk_capactity
 
 
-# --
-# Get absolute limits details for a tenant
-#
-def get_quotas_limit_details():
-    keystone = get_keystone_client()
-    tenantlist = keystone.tenants.list()
-
-    global _debug
-    if _debug:
-        print '[+] Crunching flavor stats for all tenants ...'
-
-    d = {}
-
-    for tenant in tenantlist:
-
-        if tenant.enabled == False:
-            t_tenant_name = tenant.name
-
-            d[t_tenant_name] = {
-                'm1.tiny'   : 'disabled',
-                'm1.small'  : 'disabled',
-                'm1.medium' : 'disabled',
-                'm1.large'  : 'disabled',
-                'm1.xlarge' : 'disabled',
-                'm1.2xlarge': 'disabled',
-                'm1.4xlarge': 'disabled',
-                'm1.8xlarge': 'disabled',
-                'custom'    : 'disabled',
-            }
-
-        else:
-
-            nova = get_nova_client(tenant.name)
-            neutron = get_neutron_client(tenant.name)
-            cinder = get_cinder_client(tenant.name)
-            t_tenant_name = tenant.name
-
-            #=====================================================================================================
-            # Quotas Compute
-            #=====================================================================================================
-            """Retrieves quotas and limits for each of tenant from compute API"""
-            d[t_tenant_name] = {'limits_compute': {}, 'quotas_compute': {} }
-
-            # Get Nova-absolute limits for tenant
-            limits = nova.limits.get(tenant_id=tenant.id).absolute
-            for limit in limits:
-                if 'ram' in limit.name.lower():
-                    limit.value = limit.value #* 1024.0 * 1024.0
-                d[t_tenant_name]['limits_compute'][limit.name] = limit.value
-            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
-
-            # Nova Quotas for tenant
-            quotas = nova.quotas.get(tenant_id=tenant.id)
-            for item in ('cores', 'fixed_ips', 'floating_ips', 'instances',
-                'key_pairs', 'ram', 'security_groups','security_group_rules', 'server_groups', 'server_group_members'):
-                if item == 'ram':
-                    setattr(quotas, item, getattr(quotas, item)) #* 1024 * 1024)
-                d[t_tenant_name]['quotas_compute'][item] = getattr(quotas, item)
-            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
-
-
-            #=====================================================================================================
-            # Quotas Networks
-            #=====================================================================================================
-            """Retrieves tenant quotas from Neutron- Networks API"""
-            # get Networks-tenant quotas
-            d[t_tenant_name] = {'quotas_networks': {}}
-            quotas_networks = neutron.show_quota(tenant_id=tenant.id)#['quotas']
-            print quotas_networks
-            # for quota_network in quotas_networks:
-            for item in ('floatingip', 'health_monitor', 'subnetpool',
-                  'member', 'network', 'port', 'router',
-                  'security_group', 'security_group_rule', 'subnet', 'rbac_policy','pool'):
-                d[t_tenant_name]['quotas_networks'][item] = quotas_networks['quota'][item]
-            # TODO Need to add tenant_id to d[t_tenant_name] to store in DB
-
-
-            #TODO """Retrieves stats from Cinder"""
-            #=====================================================================================================
-            # Quotas Networks
-            #=====================================================================================================
-            """Retrieves tenant quotas from cinder- Cinder API v2"""
-            d[t_tenant_name] = {
-                'tenant_id': tenant.id,
-                'quotas_cinder': {},
-                'limits_cinder': {},
-                'volume': {'count': 0, 'byte': 0}
-                'volume_snapshots':{'count': 0, 'byte': 0}
-            }
-            # Get cinder-absolute limits for tenant
-            try:
-                limits_cinder = cinder.limits.get().absolute
-            except Exception:
-                continue
-            for limit_cinder in limits_cinder:
-                if 'Giga' in limit_cinder.name:
-                    limit_cinder.value = limit_cinder.value * 1024 * 1024 * 1024
-                d[t_tenant_name]['limits_cinder'][limit_cinder.name] = limit_cinder.value
-
-            # get cinder-tenant quotas
-
-            #TODO """Retrieves stats from Swift"""
-
-    return d
 
 
 
@@ -1111,7 +1179,7 @@ def get_quotas_limit_details():
 def csv_report(d_report,l_header,file_name):
     global _debug
     if _debug == True:
-        print "[+] Formating report as CSV .."
+        print "[+] Formating report as CSV ..."
         print d_report
         print l_header
 
@@ -1202,22 +1270,29 @@ def csv_report(d_report,l_header,file_name):
 #         ]
 #         # Write header + report to target
 #         csv_report(report,report_headers,output_file)
+
+
 def go_main():
     return 0
 
 if __name__ == "__main__":
-    data = get_all_tenant_utilization()
-
-    # data = get_all_tenant_flavorcount()
-    # data = get_quotas_limit_details()
-    # print data
-
-    attributes = data['admin']['Networks_Attributes']  #get tenant from tenant table nhe
-    print attributes
-    print attributes[0]#['status']
+    # data = get_all_tenant_utilization()
+    # attributes = data['admin']['Networks_Attributes']  #get tenant from tenant table nhe
+    # print attributes
+    # print attributes[0]#['status']
     #
     # # get_users_per_tenant_details()
     #
     # # print get_hypervisor_all_compute_utilization()
     #
-    # get_keystone('demo')
+
+    # data = get_all_tenant_flavorcount()
+    # data = get_quotas_limit_details()
+    # json_data = data['admin']['limits_compute']
+    # print type(json_data)
+    # obj_data = json.dumps(json_data, sort_keys=False).encode('utf-8')
+    # print obj_data
+
+
+    get_dbformat_compute_quotas_from_op()
+
