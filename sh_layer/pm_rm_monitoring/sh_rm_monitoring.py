@@ -7,6 +7,7 @@ import csv
 import collections
 import re
 import json
+import ast
 
 from novaclient import client as novaclient
 from neutronclient.neutron import client as neutronclient
@@ -88,6 +89,17 @@ def __str2db_format(data):
         return '"' + out + '"'
     else:
         return json.dumps(out)
+
+def convert_string_2_dict(input):
+    return 0
+
+
+def __replace_single_quotes(self, data):
+    '''replace single quotes ' of any string content of data dictionary'''
+    for k,v in data.items():
+        if type(v) == str:
+            if "'" in v:
+                data[k] = data[k].replace("'",'"')
 
 
 # --
@@ -210,16 +222,79 @@ def get_flavor_count(p_nova_client):
 # Returns number of users and list users for a given tenant, to get correctly keystone client for counting list users
 # need to call get_keystone(p_tenant_name) instead of get_keystone_client() as usual
 #
-def get_users_per_tenant_details(p_keystone_client):
+def _get_users_per_tenant_details():
     """Retrieves stats from keystone"""
     # get keystone client from get_keystone(p_tenant_name) function which have 'power'
     # to fully access keystone functions in lib
     # Count number of users in a tenant
+
+    # get_keystone_client() is called
+    keystone = get_keystone_client()
+    tenantlist = keystone.tenants.list()
+
+    # initiate users_dict
+    users_data = {}
+    for tenant in tenantlist:
+
+        # invoke another function to get new keystone client for getting users list per tenant
+        t_keystone = get_keystone(tenant.name)
+
+        # t_users_cnt = len(t_keystone.tenants.list_users(tenant.id))
+        t_users_list = t_keystone.tenants.list_users(tenant.id)
+        users_data[tenant.name] = t_users_list
+
+    return users_data, keystone
+
+def convert_user_str_2_dict(data):
+    '''
+    this function is to convert data format from _get_users_per_tenant_details function : string format to dictionary format for each of user in a given tenant
+
+    :param data: is string format including user info in a  given tenant
+    :return: dict format of a user in a given tenant
+    '''
+    # notice keep a space behind "<User " in below code line to avoid the issue when using literal_eval() function
+    data = str(data).lstrip('<User ')
+    t_user_str = (data.rstrip('>'))
+    t_user_dict= ast.literal_eval(t_user_str)
+    # print t_user_dict
+
+    return t_user_dict
+
+def get_users_per_tenant():
+    users_data, keystone = _get_users_per_tenant_details()
+    tenantlist = keystone.tenants.list()
+    t_users_list = []
+    for tenant in tenantlist:
+        t_users_data= users_data[tenant.name]
+
+        for t_user in t_users_data:
+            t_user_dict = convert_user_str_2_dict(t_user)
+            #insert tenant name and tenant id into t_user_dict to identify exactly which tenant user is being located - easy to keep track when storing in DB
+            t_user_dict['tenant_name'] = tenant.name
+            t_user_dict['tenant_id'] = tenant.id
+            t_users_list.append(t_user_dict)
+
+    return t_users_list
+
+
+def get_user_quota(p_nova_client, p_keystone_client):
     tenantlist = p_keystone_client.tenants.list()
+    novaclient
     for tenant in tenantlist:
         t_users_cnt = len(p_keystone_client.tenants.list_users(tenant.id))
         t_users_list = p_keystone_client.tenants.list_users(tenant.id)
-    # return data
+        limits = nova.limits.get(tenant_id=tenant.id).absolute
+
+        user_quota = nova.quotas.get(tenant_id=tenant.id, user_id='ffbc3c72aa9f44769f3430093c59c457')
+        print "print  user_quota for demo user"
+        print user_quota
+
+
+
+
+
+
+
 
 # --
 # get_instance_details()
@@ -710,13 +785,15 @@ def get_all_tenant_utilization():
 
 
         else :
+            # Un_used code---this part of code has been move to get_users_per_tenant_details()
+
             # get keystone client from get_keystone(p_tenant_name) function which have 'power'
             # to fully access keystone functions in lib
             t_keystone = get_keystone(tenant.name)
             t_users_cnt = len(t_keystone.tenants.list_users(tenant.id))
             t_users_list = t_keystone.tenants.list_users(tenant.id)
-            print " user list"
-            print t_users_list
+            # print " user list"
+            # print t_users_list
 
             nova = get_nova_client(tenant.name)
             cinder = get_cinder_client(tenant.name)
@@ -1054,6 +1131,7 @@ def get_quotas_limit_details():
             print "Limits of compute resources for all tenants are : %s" % (q[t_tenant_name]['limits_compute'])
 
             # Nova Quotas for tenant
+
             quotas = nova.quotas.get(tenant_id=tenant.id)
             for item in ('cores', 'fixed_ips', 'floating_ips', 'instances',
                 'key_pairs', 'ram', 'security_groups','security_group_rules', 'server_groups', 'server_group_members'):
@@ -1428,16 +1506,26 @@ if __name__ == "__main__":
 
 
     # get_dbformat_compute_quotas_from_op()
-    try:
-        get_dbformat_compute_limits_from_op()
-        mydb = resource_db.resource_db()
-        if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
-            print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
-            exit(-1)
-        data_list = get_dbformat_networks_quotas_from_op()
-        for data in data_list:
-            add_quotas_limits_2_db(mydb, table='tenants_quota_network_rm', data=data)
 
-    except (KeyboardInterrupt, SystemExit):
-        print 'Exiting Resource Management'
-        exit()
+
+    # try:
+    #     get_dbformat_compute_limits_from_op()
+    #     mydb = resource_db.resource_db()
+    #     if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+    #         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
+    #         exit(-1)
+    #     data_list = get_dbformat_networks_quotas_from_op()
+    #     for data in data_list:
+    #         add_quotas_limits_2_db(mydb, table='tenants_quota_network_rm', data=data)
+    #
+    # except (KeyboardInterrupt, SystemExit):
+    #     print 'Exiting Resource Management'
+    #     exit()
+
+
+    # check user quota and limits
+    # get_quotas_limit_details()
+
+    # check user list
+    users_dat= get_users_per_tenant()
+    print users_dat
