@@ -1,6 +1,6 @@
 import resource_db
 import sh_rm_monitoring
-from sh_rm_monitoring import get_dbformat_compute_quotas_from_op
+from sh_rm_monitoring import get_dbformat_compute_tenant_quotas_from_op
 
 
 
