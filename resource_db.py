@@ -6,7 +6,7 @@ from threading import Thread
 from collections import defaultdict
 
 import todo
-from sh_layer import sh_compute_capacity_poll as sh_compute
+from sh_layer import sh_total_compute_capacity_util_poll_op as sh_compute
 global global_config
 global_config = {'db_host': 'localhost',
                   'db_user': 'root',

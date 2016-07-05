@@ -3,11 +3,11 @@ import json
 
 import todo
 from  resource_db import resource_db
-from sh_total_compute_capacity_util_poll_op import vcpu_op_stats
-from sh_total_compute_capacity_util_poll_op import vdisk_op_stats
-from sh_total_compute_capacity_util_poll_op import vmem_op_stats
-from sh_total_compute_capacity_util_poll_op import load_flavors_by_id
-import sh_total_networks_capacity_util_poll_op
+from sh_compute_capacity_poll import vcpu_op_stats
+from sh_compute_capacity_poll import vdisk_op_stats
+from sh_compute_capacity_poll import vmem_op_stats
+from sh_compute_capacity_poll import load_flavors_by_id
+import sh_network_capacity_poll
 
 global global_config
 
