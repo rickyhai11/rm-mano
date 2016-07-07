@@ -40,10 +40,10 @@ global_config = {'db_host': '116.89.184.43',
 
 os_username = 'admin'
 os_password = 'fncp2015'
-os_auth_url = "http://129.254.39.208:5000/v2.0/"
+os_auth_url = "http://129.254.39.209:5000/v2.0/"
 _debug = False
 # new para
-os_url = 'http://129.254.39.208:35357/v2.0'
+os_url = 'http://129.254.39.209:35357/v2.0'
 
 
 #Static flavors list
@@ -1467,7 +1467,105 @@ def get_users_per_tenant():
     return t_users_list
 
 
-def get_user_quota():
+def get_user_compute_quota():
+    '''
+    this function is to get users quota in a given tenant for compute, networks and storage
+    :return: user quotas for each kind of resources such as : compute, network or storage
+    notice that user quota-storage is currently not supported yet.
+    '''
+    # get keystone client for listing out all of tenants
+    keystone = get_keystone_client()
+    tenant_list = keystone.tenants.list()
+    # print tenant_list
+    per_tenant_users_util_compute_list = []
+    # all_tenants_users_util_compute_list = []
+
+    for tenant in tenant_list:
+        # print " in tenant"
+        # print tenant.name
+        # invoke another function to get new keystone client for getting users list per tenant
+        t_keystone = get_keystone(tenant.name)
+        novaclient = get_nova_client(tenant.name)
+        # using that above keystone client for list out users in given tenant
+        t_users_list = t_keystone.tenants.list_users(tenant.id)
+        # print t_users_list
+        for user in t_users_list:
+            users_util_compute = {}
+            # print "in user"
+            # print user
+
+            """Retrieves quotas for each of user in given tenant """
+            #=====================================================================================================
+            # User Quota- Compute resources
+            #=====================================================================================================
+
+            user_quota_compute = novaclient.quotas.get(tenant_id=tenant.id, user_id=user.id)
+            print user_quota_compute.ram
+
+            users_util_compute['tenant_name']                     = tenant.name
+            users_util_compute['tenant_id']                       = tenant.id
+            users_util_compute['user_name']                       = user.name
+            users_util_compute['user_id']                         = user.id
+            # vmem meters
+            users_util_compute['max_vmem']                        = user_quota_compute.ram
+            users_util_compute['used_vmem']                       = 0
+            users_util_compute['reserved_vmem']                   = 0
+            users_util_compute['available_vmem']                  = users_util_compute['max_vmem'] - (users_util_compute['used_vmem'] + users_util_compute['reserved_vmem'])
+            users_util_compute['percentage_vmem_used']        = ((users_util_compute['used_vmem']) / (users_util_compute['max_vmem']))*100
+            users_util_compute['percentage_vmem_reserved']    = ((users_util_compute['reserved_vmem']) / (users_util_compute['max_vmem']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_vmem_usage']      = ((users_util_compute['reserved_vmem'] + users_util_compute['used_vmem']) /
+                                                                      (users_util_compute['max_vmem']))*100
+            # vcpus meters
+            users_util_compute['max_vcpus']                       = user_quota_compute.cores
+            users_util_compute['used_vcpus']                      = 0
+            users_util_compute['reserved_vcpus']                  = 0
+            users_util_compute['available_vcpus']                 = users_util_compute['max_vcpus'] - (users_util_compute['used_vcpus'] + users_util_compute['reserved_vcpus'])
+            users_util_compute['percentage_vcpus_used']        = ((users_util_compute['used_vcpus']) / (users_util_compute['max_vcpus']))*100
+            users_util_compute['percentage_vcpus_reserved']    = ((users_util_compute['reserved_vcpus']) / (users_util_compute['max_vcpus']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_vcpus_usage']       = ((users_util_compute['reserved_vcpus'] + users_util_compute['used_vcpus']) /
+                                                                        (users_util_compute['max_vcpus']))*100
+            # server groups meters
+            # users_quota_compute['max_server_groups']               = user_quota_compute.server_groups
+            # users_quota_compute['max_server_group_members']        = user_quota_compute.server_group_members
+            # Floating up meters
+            users_util_compute['max_floating_ips']                = user_quota_compute.floating_ips
+            users_util_compute['used_floating_ips']               = 0
+            users_util_compute['reserved_floating_ips']           = 0
+            users_util_compute['available_floating_ips']          = users_util_compute['max_floating_ips'] - (users_util_compute['used_floating_ips'] + users_util_compute['reserved_floating_ips'])
+            users_util_compute['percentage_floating_ips_used']        = ((users_util_compute['used_floating_ips']) / (users_util_compute['max_floating_ips']))*100
+            users_util_compute['percentage_floating_ips_reserved']    = ((users_util_compute['reserved_floating_ips']) / (users_util_compute['max_floating_ips']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_floating_ips_usage'] = ((users_util_compute['reserved_floating_ips'] + users_util_compute['used_floating_ips']) /
+                                                                         (users_util_compute['max_floating_ips']))*100
+            # fixed ip and key pairs meters
+            users_util_compute['max_fixed_ips']                   = user_quota_compute.fixed_ips
+            users_util_compute['max_key_pairs']                   = user_quota_compute.key_pairs
+            # instance count meters
+            users_util_compute['max_vnfs']                   = user_quota_compute.instances
+            users_util_compute['used_vnfs']                  = 0
+            users_util_compute['reserved_vnfs']              = 0
+            users_util_compute['available_vnfs']             = users_util_compute['max_vnfs'] - (users_util_compute['used_vnfs'] + users_util_compute['reserved_vnfs'])
+            users_util_compute['percentage_vnfs_used']        = ((users_util_compute['used_vnfs']) / (users_util_compute['max_vnfs']))*100
+            users_util_compute['percentage_vnfs_reserved']    = ((users_util_compute['reserved_vnfs']) / (users_util_compute['max_vnfs']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_vnfs_usage'] = ((users_util_compute['reserved_vnfs'] + users_util_compute['used_vnfs']) /
+                                                                 (users_util_compute['max_vnfs']))*100
+            # Other meters
+            users_util_compute['max_security_group_rules']        = user_quota_compute.security_group_rules
+            users_util_compute['max_security_groups']             = user_quota_compute.security_groups
+            users_util_compute['max_injected_file_content_bytes'] = user_quota_compute.injected_file_content_bytes
+            users_util_compute['max_injected_file_path_bytes']    = user_quota_compute.injected_file_path_bytes
+
+            # Append dict "users_quota_compute" to list "users_quota_compute_list" it makes us easier when storing in DB
+            # print users_util_compute
+            per_tenant_users_util_compute_list.append(users_util_compute)
+
+    print per_tenant_users_util_compute_list
+    return per_tenant_users_util_compute_list
+
+def get_user_network_quota():
     '''
     this function is to get users quota in a given tenant for compute, networks and storage
     :return: user quotas for each kind of resources such as : compute, network or storage
@@ -1477,175 +1575,97 @@ def get_user_quota():
     keystone = get_keystone_client()
     tenant_list = keystone.tenants.list()
     # Initiate dicts and list for user quotas
-    users_quota_compute = {}
-    users_quota_compute_list = []
-    users_quota_networks = {}
-    users_quota_networks_list = []
-    users_quota_storage = {}
-    users_quota_storage_list = []
+    users_util_networks_list = []
 
     for tenant in tenant_list:
         # invoke another function to get new keystone client for getting users list per tenant
         t_keystone = get_keystone(tenant.name)
-        novaclient = get_nova_client(tenant.name)
         neutron = get_neutron_client(tenant.name)
-        cinder = get_cinder_client(tenant.name)
 
         # using that above keystone client for list out users in given tenant
         t_users_list = t_keystone.tenants.list_users(tenant.id)
         for user in t_users_list:
-
-            """Retrieves quotas for each of user in given tenant """
-            #=====================================================================================================
-            # User Quota- Compute resources
-            #=====================================================================================================
-
-            user_quota_compute = novaclient.quotas.get(tenant_id=tenant.id, user_id=user.id)
-
-            # for item in ('cores', 'fixed_ips', 'floating_ips', 'instances',
-            #     'key_pairs', 'ram', 'security_groups','security_group_rules', 'server_groups', 'server_group_members', 'injected_file_content_bytes', 'injected_file_path_bytes'):
-            #     if item == 'ram':
-            #         setattr(user_compute_quota, item, getattr(user_compute_quota, item)) #* 1024 * 1024
-            #     q_u[t_user_name]['user_quota_compute'][item] = getattr(user_compute_quota, item)
-            # print "print user_quota for %s user in %s tenant" % (user.name, tenant.name)
-            # print q_u[t_user_name]['user_quota_compute']
-
-            users_quota_compute['tenant_name']                     = tenant.name
-            users_quota_compute['tenant_id']                       = tenant.id
-            users_quota_compute['user_name']                       = user.name
-            users_quota_compute['user_id']                         = user.id
-            # vmem meters
-            users_quota_compute['max_vmem']                        = user_quota_compute.ram
-            users_quota_compute['used_vmem']                       = 0
-            users_quota_compute['available_vmem']                  = users_quota_compute['max_vmem'] - (users_quota_compute['used_vmem'] + users_quota_compute['reserved_vmem'])
-            users_quota_compute['reserved_vmem']                   = 0
-            users_quota_compute['percentage_vmem_used']        = ((users_quota_compute['used_vmem']) / (users_quota_compute['max_vmem']))*100
-            users_quota_compute['percentage_vmem_reserved']    = ((users_quota_compute['reserved_vmem']) / (users_quota_compute['max_vmem']))*100
-            # including used + reserved resources
-            users_quota_compute['percentage_total_vmem_usage']      = ((users_quota_compute['reserved_vmem'] + users_quota_compute['used_vmem']) /
-                                                                      (users_quota_compute['max_vmem']))*100
-            # vcpus meters
-            users_quota_compute['max_vcpus']                       = user_quota_compute.cores
-            users_quota_compute['used_vcpus']                      = 0
-            users_quota_compute['available_vcpus']                 = users_quota_compute['max_vcpus'] - (users_quota_compute['used_vcpus'] + users_quota_compute['reserved_vcpus'])
-            users_quota_compute['reserved_vcpus']                  = 0
-            users_quota_compute['percentage_vcpus_used']        = ((users_quota_compute['used_vcpus']) / (users_quota_compute['max_vcpus']))*100
-            users_quota_compute['percentage_vcpus_reserved']    = ((users_quota_compute['reserved_vcpus']) / (users_quota_compute['max_vcpus']))*100
-            # including used + reserved resources
-            users_quota_compute['percentage_total_vcpus_usage']       = ((users_quota_compute['reserved_vcpus'] + users_quota_compute['used_vcpus']) /
-                                                                      (users_quota_compute['max_vcpus']))*100
-            # server groups meters
-            users_quota_compute['max_server_groups']               = user_quota_compute.server_groups
-            users_quota_compute['max_server_group_members']        = user_quota_compute.server_group_members
-            # Floating up meters
-            users_quota_compute['max_floating_ips']                = user_quota_compute.floating_ips
-            users_quota_compute['used_floating_ips']               = 0
-            users_quota_compute['available_floating_ips']          = users_quota_compute['max_floating_ips'] - (users_quota_compute['used_floating_ips'] + users_quota_compute['reserved_floating_ips'])
-            users_quota_compute['reserved_floating_ips']           = 0
-            users_quota_compute['percentage_floating_ips_used']        = ((users_quota_compute['used_floating_ips']) / (users_quota_compute['max_floating_ips']))*100
-            users_quota_compute['percentage_floating_ips_reserved']    = ((users_quota_compute['reserved_floating_ips']) / (users_quota_compute['max_floating_ips']))*100
-            # including used + reserved resources
-            users_quota_compute['percentage_total_floating_ips_usage'] = ((users_quota_compute['reserved_floating_ips'] + users_quota_compute['used_floating_ips']) /
-                                                                      (users_quota_compute['max_floating_ips']))*100
-            # fixed ip and key pairs meters
-            users_quota_compute['max_fixed_ips']                   = user_quota_compute.fixed_ips
-            users_quota_compute['max_key_pairs']                   = user_quota_compute.key_pairs
-            # instance count meters
-            users_quota_compute['max_vnfs']                   = user_quota_compute.instances
-            users_quota_compute['used_vnfs']                  = 0
-            users_quota_compute['available_vnfs']             = users_quota_compute['max_vnfs'] - (users_quota_compute['used_vnfs'] + users_quota_compute['reserved_vnfs'])
-            users_quota_compute['reserved_vnfs']              = 0
-            users_quota_compute['percentage_vnfs_used']        = ((users_quota_compute['used_vnfs']) / (users_quota_compute['max_vnfs']))*100
-            users_quota_compute['percentage_vnfs_reserved']    = ((users_quota_compute['reserved_vnfs']) / (users_quota_compute['max_vnfs']))*100
-            # including used + reserved resources
-            users_quota_compute['percentage_total_vnfs_usage'] = ((users_quota_compute['reserved_vnfs'] + users_quota_compute['used_vnfs']) /
-                                                                      (users_quota_compute['max_vnfs']))*100
-            # Other meters
-            users_quota_compute['max_security_group_rules']        = user_quota_compute.security_group_rules
-            users_quota_compute['max_security_groups']             = user_quota_compute.security_groups
-            users_quota_compute['max_injected_file_content_bytes'] = user_quota_compute.injected_file_content_bytes
-            users_quota_compute['max_injected_file_path_bytes']    = user_quota_compute.injected_file_path_bytes
-
-            # Append dict "users_quota_compute" to list "users_quota_compute_list" it makes us easier when storing in DB
-            users_quota_compute_list.append(users_quota_compute)
+            # declare new dict for each of user.
+            users_util_networks = {}
 
             """Retrieves quotas for each of user in given tenant"""
             #=====================================================================================================
             # User Quotas - network resources
             #=====================================================================================================
             user_quota_networks = neutron.show_quota(tenant_id=tenant.id, user_id= user.id)['quota']
+            # print user_quota_networks['subnet']
             # print user_quota_networks
-            users_quota_networks['tenant_name']                       = tenant.name
-            users_quota_networks['tenant_id']                         = tenant.id
-            users_quota_networks['user_name']                         = user.name
-            users_quota_networks['user_id']                           = user.id
+            users_util_networks['tenant_name']                       = tenant.name
+            users_util_networks['tenant_id']                         = tenant.id
+            users_util_networks['user_name']                         = user.name
+            users_util_networks['user_id']                           = user.id
             # subnet meters
-            users_quota_networks['max_subnet']                        = user_quota_networks['subnet']
-            users_quota_networks['used_subnet']                       = 0
-            users_quota_networks['available_subnet']                  = user_quota_networks['max_subnet'] - users_quota_networks['used_subnet']
-            users_quota_networks['reserved_subnet']                   = 0
-            users_quota_networks['percentage_subnet_used']   = ((users_quota_networks['used_subnet']) / (users_quota_networks['max_subnet']))*100
-            users_quota_networks['percentage_subnet_reserved']= ((users_quota_networks['reserved_subnet']) / (users_quota_networks['max_subnet']))*100
+            users_util_networks['max_subnet']                        = user_quota_networks['subnet']
+            users_util_networks['used_subnet']                       = 0
+            users_util_networks['reserved_subnet']                   = 0
+            users_util_networks['available_subnet']                  = users_util_networks['max_subnet'] - (users_util_networks['used_subnet'] + users_util_networks['reserved_subnet'] )
+            users_util_networks['percentage_subnet_used']   = ((users_util_networks['used_subnet']) / (users_util_networks['max_subnet']))*100
+            users_util_networks['percentage_subnet_reserved']= ((users_util_networks['reserved_subnet']) / (users_util_networks['max_subnet']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_subnet_usage']      = ((users_quota_networks['reserved_subnet'] + users_quota_networks['used_subnet']) /
-                                                                      (users_quota_networks['max_subnet']))*100
+            users_util_networks['percentage_total_subnet_usage']      = ((users_util_networks['reserved_subnet'] + users_util_networks['used_subnet']) /
+                                                                      (users_util_networks['max_subnet']))*100
             # networks meters
-            users_quota_networks['max_network']                       = user_quota_networks['network']
-            users_quota_networks['used_network']                      = 0
-            users_quota_networks['available_network']                 = user_quota_networks['max_network'] - users_quota_networks['used_network']
-            users_quota_networks['reserved_network']                  = 0
-            users_quota_networks['percentage_network_used']    = ((users_quota_networks['used_network']) / (users_quota_networks['max_network']))*100
-            users_quota_networks['percentage_network_reserved']= ((users_quota_networks['reserved_network']) / (users_quota_networks['max_network']))*100
+            users_util_networks['max_network']                       = user_quota_networks['network']
+            users_util_networks['used_network']                      = 0
+            users_util_networks['reserved_network']                  = 0
+            users_util_networks['available_network']                 = users_util_networks['max_network'] - (users_util_networks['used_network'] + users_util_networks['reserved_network'])
+            users_util_networks['percentage_network_used']    = ((users_util_networks['used_network']) / (users_util_networks['max_network']))*100
+            users_util_networks['percentage_network_reserved']= ((users_util_networks['reserved_network']) / (users_util_networks['max_network']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_network_usage']      = ((users_quota_networks['reserved_network'] + users_quota_networks['used_network']) /
-                                                                      (users_quota_networks['max_network']))*100
+            users_util_networks['percentage_total_network_usage']      = ((users_util_networks['reserved_network'] + users_util_networks['used_network']) /
+                                                                      (users_util_networks['max_network']))*100
             # floating ip meters
-            users_quota_networks['max_floatingip']                    = user_quota_networks['floatingip']
-            users_quota_networks['used_floatingip']                   = 0
-            users_quota_networks['available_floatingip']              = user_quota_networks['max_floatingip'] - users_quota_networks['used_floatingip']
-            users_quota_networks['reserved_floatingip']               = 0
-            users_quota_networks['percentage_floatingip_used']    = ((users_quota_networks['used_floatingip']) / (users_quota_networks['max_floatingip']))*100
-            users_quota_networks['percentage_floatingip_reserved']= ((users_quota_networks['reserved_floatingip']) / (users_quota_networks['max_floatingip']))*100
+            users_util_networks['max_floatingip']                    = user_quota_networks['floatingip']
+            users_util_networks['used_floatingip']                   = 0
+            users_util_networks['reserved_floatingip']               = 0
+            users_util_networks['available_floatingip']              = users_util_networks['max_floatingip'] - (users_util_networks['used_floatingip'] + users_util_networks['reserved_floatingip'])
+            users_util_networks['percentage_floatingip_used']    = ((users_util_networks['used_floatingip']) / (users_util_networks['max_floatingip']))*100
+            users_util_networks['percentage_floatingip_reserved']= ((users_util_networks['reserved_floatingip']) / (users_util_networks['max_floatingip']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_floatingip_usage']      = ((users_quota_networks['reserved_floatingip'] + users_quota_networks['used_floatingip']) /
-                                                                      (users_quota_networks['max_floatingip']))*100
+            users_util_networks['percentage_total_floatingip_usage']      = ((users_util_networks['reserved_floatingip'] + users_util_networks['used_floatingip']) /
+                                                                      (users_util_networks['max_floatingip']))*100
             # router meters
-            users_quota_networks['max_router']                        = user_quota_networks['router']
-            users_quota_networks['used_router']                       = 0
-            users_quota_networks['available_router']                  = user_quota_networks['max_router'] - users_quota_networks['used_router']
-            users_quota_networks['reserved_router']                   = 0
-            users_quota_networks['percentage_router_used']    = ((users_quota_networks['used_router']) / (users_quota_networks['max_router']))*100
-            users_quota_networks['percentage_router_reserved']= ((users_quota_networks['reserved_router']) / (users_quota_networks['max_router']))*100
+            users_util_networks['max_router']                        = user_quota_networks['router']
+            users_util_networks['used_router']                       = 0
+            users_util_networks['reserved_router']                   = 0
+            users_util_networks['available_router']                  = users_util_networks['max_router'] - (users_util_networks['used_router'] + users_util_networks['reserved_router'])
+            users_util_networks['percentage_router_used']    = ((users_util_networks['used_router']) / (users_util_networks['max_router']))*100
+            users_util_networks['percentage_router_reserved']= ((users_util_networks['reserved_router']) / (users_util_networks['max_router']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_router_usage']      = ((users_quota_networks['reserved_router'] + users_quota_networks['used_router']) /
-                                                                      (users_quota_networks['max_router']))*100
+            users_util_networks['percentage_total_router_usage']      = ((users_util_networks['reserved_router'] + users_util_networks['used_router']) /
+                                                                      (users_util_networks['max_router']))*100
             # port meters
-            users_quota_networks['max_port']                          = user_quota_networks['port']
-            users_quota_networks['used_port']                         = 0
-            users_quota_networks['available_port']                    = user_quota_networks['max_port'] -  users_quota_networks['used_port']
-            users_quota_networks['reserved_port']                     = 0
-            users_quota_networks['percentage_port_used']    = ((users_quota_networks['used_port']) / (users_quota_networks['max_port']))*100
-            users_quota_networks['percentage_port_reserved']= ((users_quota_networks['reserved_port']) / (users_quota_networks['max_port']))*100
+            users_util_networks['max_port']                          = user_quota_networks['port']
+            users_util_networks['used_port']                         = 0
+            users_util_networks['reserved_port']                     = 0
+            users_util_networks['available_port']                    = users_util_networks['max_port'] -  (users_util_networks['used_port'] + users_util_networks['reserved_port'])
+            users_util_networks['percentage_port_used']    = ((users_util_networks['used_port']) / (users_util_networks['max_port']))*100
+            users_util_networks['percentage_port_reserved']= ((users_util_networks['reserved_port']) / (users_util_networks['max_port']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_port_usage']      = ((users_quota_networks['reserved_port'] + users_quota_networks['used_port']) /
-                                                                      (users_quota_networks['max_port']))*100
+            users_util_networks['percentage_total_port_usage']      = ((users_util_networks['reserved_port'] + users_util_networks['used_port']) /
+                                                                      (users_util_networks['max_port']))*100
             # subnet-pools meters
-            users_quota_networks['max_subnetpool']                    = user_quota_networks['subnetpool']
-            users_quota_networks['used_subnetpool']                   = 0
-            users_quota_networks['available_subnetpool']              = user_quota_networks['subnetpool'] - users_quota_networks['used_subnetpool']
-            users_quota_networks['reserved_subnetpool']               = 0
-            users_quota_networks['percentage_subnetpool_used']    = ((users_quota_networks['used_subnetpool']) / (users_quota_networks['max_subnetpool']))*100
-            users_quota_networks['percentage_subnetpool_reserved']= ((users_quota_networks['reserved_subnetpool']) / (users_quota_networks['max_subnetpool']))*100
+            users_util_networks['max_subnetpool']                    = user_quota_networks['subnetpool']
+            users_util_networks['used_subnetpool']                   = 0
+            users_util_networks['reserved_subnetpool']               = 0
+            users_util_networks['available_subnetpool']              = users_util_networks['max_subnetpool'] - (users_util_networks['used_subnetpool'] + users_util_networks['reserved_subnetpool'])
+            users_util_networks['percentage_subnetpool_used']    = ((users_util_networks['used_subnetpool']) / (users_util_networks['max_subnetpool']))*100
+            users_util_networks['percentage_subnetpool_reserved']= ((users_util_networks['reserved_subnetpool']) / (users_util_networks['max_subnetpool']))*100
             # including used + reserved resources
-            users_quota_networks['percentage_total_subnetpool_usage']      = ((users_quota_networks['reserved_subnetpool'] + users_quota_networks['used_subnetpool']) /
-                                                                      (users_quota_networks['max_subnetpool']))*100
+            users_util_networks['percentage_total_subnetpool_usage']      = ((users_util_networks['reserved_subnetpool'] + users_util_networks['used_subnetpool']) /
+                                                                      (users_util_networks['max_subnetpool']))*100
             # other meters
-            users_quota_networks['max_security_group']                = user_quota_networks['security_group']
-            users_quota_networks['max_security_group_rule']           = user_quota_networks['security_group_rule']
-            users_quota_networks['max_rbac_policy']                   = user_quota_networks['rbac_policy']
+            users_util_networks['max_security_group']                = user_quota_networks['security_group']
+            users_util_networks['max_security_group_rule']           = user_quota_networks['security_group_rule']
+            users_util_networks['max_rbac_policy']                   = user_quota_networks['rbac_policy']
 
             # Append dict "users_quota_networks" to list "users_quota_networks_list" it makes us easier when storing in DB
-            users_quota_networks_list.append(users_quota_networks)
+            users_util_networks_list.append(users_util_networks)
 
             """Retrieves quotas for each of user in given tenant"""
             #=====================================================================================================
@@ -1655,13 +1675,15 @@ def get_user_quota():
             # users_quota_storage = cinder.quotas.get(user_id=user.id)
             # TODO NEED TO IMPLEMENT THIS PART WHEN USER QUOTA IS FULLY SUPPORTED IN CINDER-OPENSTACK
 
-    # print users_quota_compute_list
-    # print users_quota_networks_list
-    # print users_quota_storage
-    return users_quota_compute_list, users_quota_networks_list
+    return users_util_networks_list
 
-
-
+def get_user_storage_quota():
+    '''
+    user storage quota is not supported yet at this phase
+    (https://blueprints.launchpad.net/cinder/+spec/per-project-user-quotas-support)
+    :return:
+    '''
+    return 0
 
 
 
@@ -1877,9 +1899,10 @@ if __name__ == "__main__":
         if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
-        data_list = get_dbformat_compute_tenant_limits_from_op()
+        data_list = get_user_compute_quota()
+        # data_list = get_user_network_quota()
         for data in data_list:
-            add_quotas_limits_2_db(mydb, table='tenants_utilization_compute_rm', data=data)
+            add_quotas_limits_2_db(mydb, table='users_util_compute_rm', data=data)
 
     except (KeyboardInterrupt, SystemExit):
         print 'Exiting Resource Management'

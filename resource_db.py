@@ -1,38 +1,33 @@
 import MySQLdb.cursors
-import MySQLdb as rmdb
+import MySQLdb as mdb
 import json
 import sys
-from threading import Thread
-from collections import defaultdict
 
-import todo
-from sh_layer import sh_total_compute_capacity_util_poll_op as sh_compute
 global global_config
 global_config = {'db_host': 'localhost',
                   'db_user': 'root',
                   'db_passwd': 'S@igon0011',
                   'db_name': 'rm_db'
                  }
-# global data
-# data = {'reservation_id': '6789',
-#         'label': 'test2',
-#         'host_id': "12212817268DJKHSAJD",
-#         'host_name': 'hai_compute',
-#         'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
-#         'user_name': 'admin',
-#         'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-#         'tenant_name': 'admin',
-#         'start_time': '2016-04-21 12:11:11',
-#         'end_time': '2016-04-21 12:22:22',
-#         'flavor_id': '1',
-#         'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
-#         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-#         'number_instance': '1',
-#         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-#         'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
-#         'status': 'ACTIVE',
-#         'summary': 'reservation testing'
-#         }
+data = {'reservation_id': '22222',
+        'label': 'test4',
+        'host_id': "12212817268DJKHSAJD",
+        'host_name': 'hai_compute',
+        'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
+        'user_name': 'admin',
+        'tenant_id': '4a766494021447c7905b81adae050a97',
+        'tenant_name': 'demo',
+        'start_time': '2016-05-23 18:04:00',
+        'end_time': '2016-05-23 18:09:00',
+        'flavor_id': 1,
+        'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
+        'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
+        'number_instance': '1',
+        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
+        'ns_id': 'ffbc3c72aa9f44769f3430093c59c457',
+        'status': 'ACTIVE',
+        'summary': 'reservation testing'
+        }
 '''
 Should consider to user array for status field
 '''
@@ -69,10 +64,10 @@ class resource_db():
             if database is not None: self.database = database
             # if cursorclass is not None: self.cursorclass = cursorclass
 
-            self.con =rmdb.connect(self.host, self.user, self.passwd, self.database)
+            self.con =mdb.connect(self.host, self.user, self.passwd, self.database)
             print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
             return 0
-        except rmdb.Error, e:
+        except mdb.Error, e:
             print "cannot connect to %s@%s ---> %s Error %d:%s" % (self.user, self.host, self.database, e.args[0],
                                                                    e.args[1])
             return -1
@@ -82,7 +77,7 @@ class resource_db():
         try:
             self.con.close()
             del self.con
-        except rmdb.Error, e:
+        except mdb.Error, e:
             print "Error disconnecting from DB: Error %d: %s" % (e.args[0], e.args[1])
             return -1
         except AttributeError, e: #self.con not defined
@@ -149,8 +144,8 @@ class resource_db():
             print values
             self.cursor.execute(sql, values)
             added = self.cursor.rowcount
-            #get last added id in a table
-            added_id = self.cursor.lastrowid  #Returns the value generated for an AUTO_INCREMENT column TODO
+            # get last added id in a table
+            added_id = self.cursor.lastrowid  # Returns the value generated for an AUTO_INCREMENT column TODO
             print added_id
             self.con.commit()
             if added > 0:
@@ -161,7 +156,7 @@ class resource_db():
                 print "Failed to add a new row into database table: %s" % table_name
                 return added
 
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
             self.con.rollback()
 
@@ -184,7 +179,7 @@ class resource_db():
                 deleted = self.cur.rowcount
                 print "Delete successfully a reservation: %s " % deleted
             return deleted
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
                 print "resource_db.delete_row DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
     def update_row_timestamp_by_rsv_id(self, table_name, reservation_id, start_time, end_time):
@@ -207,7 +202,7 @@ class resource_db():
                 updated = self.cur.rowcount
                 print "Update successfully a reservation: %s " % updated
             return updated
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
 
@@ -241,7 +236,7 @@ class resource_db():
                           "###### 'reservation_id': %s was not existing " \
                           "in %s table ######" % (deleted, reservation_id, table_name)
 
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
 
     def update_row_vapp_id_by_rsv_id(self, table_name, reservation_id, vapp_id):
@@ -265,7 +260,7 @@ class resource_db():
                 updated = self.cur.rowcount
                 print "Updated vapp_id: %s successfully for %s reservation" % (vapp_id, updated)
             return updated
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
 
@@ -287,7 +282,7 @@ class resource_db():
                 #print listed
                 print rows['reservation_id']
                 return listed, rows
-        except(rmdb.Error, AttributeError), e:
+        except(mdb.Error, AttributeError), e:
             print "resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
 
     # common function- shared function for get values of a column in a table
@@ -309,7 +304,7 @@ class resource_db():
                 #for row in rows:
                     #print row[0]
                 return rows
-        except(rmdb.Error, AttributeError), e:
+        except(mdb.Error, AttributeError), e:
             print "resource_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_rsv_by_status(self, status):
@@ -325,7 +320,7 @@ class resource_db():
                 print "There are %s reservations with '%s' status." % (listed, status)
                 #print list_rsv
                 return list_rsv
-        except(rmdb.Error, AttributeError), e:
+        except(mdb.Error, AttributeError), e:
             print "resource_db.get_rsv_by_status DB exception %d: %s" % (e.args[0], e.args[1])
 
 
@@ -337,7 +332,9 @@ class resource_db():
     '''
     # re-use common adding data to db function for adding new row into db table
     def add_row_rs(self, table_name, row_dict)
+
     '''
+
     def update_row_capacity_by_uuid(self, table_name, uuid, new_values_dict):
         '''
         Removes the old (based on uuid) and adds the new values for resource capacity tables (vcpu, vmem,vdisk, network etc...)
@@ -370,7 +367,7 @@ class resource_db():
                           "###### 'uuid': %s was not existing " \
                           "in %s table ######" % (deleted, uuid, table_name)
 
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
 
     def delete_row_capacity_by_uuid(self, table_name, uuid):
@@ -391,7 +388,7 @@ class resource_db():
                     print "###### %s row has been deleted ######" % deleted
                     print "###### 'uuid': %s was not existing in %s table ######" % (uuid, table_name)
 
-        except (rmdb.Error, AttributeError), e:
+        except (mdb.Error, AttributeError), e:
             print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
 
     def get_row_capacity_by_uuid(self, table_name, uuid):
@@ -406,7 +403,7 @@ class resource_db():
                 print listed
                 print rows
                 return listed, rows
-        except(rmdb.Error, AttributeError), e:
+        except(mdb.Error, AttributeError), e:
             print "resource_db.get_row_capacity_by_uuid DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_table_capacity(self, table_name):
@@ -422,13 +419,102 @@ class resource_db():
                 #     print row
                 print " query all of %s table successfully" % table_name
                 return listed, rows
-        except(rmdb.Error, AttributeError), e:
+        except(mdb.Error, AttributeError), e:
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 
+    #**************************
+    # users and tenants based resources management- basic DB operations. Go here
+    #**************************
+
+    def get_newest_row_by_timestamp_user_in_rsv(self, table_name, rsv):
+        '''
+        This function is used to query a latest row from users utilization resources tables such as: users_util_compute_rm or users_util_network_rm
+        get one row that store current availability of resources, where the selected row has the most recent timestamp
+        and co-responding to user_id in given tenant_id (to guarantee the unique and latest oof returned row)
+        :param table_name:
+        :param rsv:
+        :return:
+        '''
+        try:
+            with self.con:
+                self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
+                sql = "SELECT * FROM (SELECT * FROM %s WHERE user_id='%s' and tenant_id='%s' ORDER BY modified_at DESC LIMIT 1) A GROUP BY modified_at, uuid" \
+                      % (table_name, rsv['user_id'], rsv['tenant_id'])
+                print sql
+                self.cur.execute(sql)
+                rows = self.cur.fetchall()
+                listed = self.cur.rowcount
+                # for row in rows:   # for debug
+                #     print row
+                print " query all of %s table successfully" % table_name
+                # Print out uuid
+                # print rows[0]['uuid']
+                return listed, rows[0]
+        except(mdb.Error, AttributeError), e:
+            print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def __update_rows(self, table, UPDATE, WHERE, log=False):
+        ''' Update one or several rows into a table.
+        Atributes
+            UPDATE: dictionary with the key: value to change
+            table: table where to update
+            WHERE: dictionary of elements to update
+        Return: (result, descriptive text) where result indicates the number of updated files, negative if error
+        '''
+                #gettting uuid
+        uuid = WHERE['uuid'] if 'uuid' in WHERE else None
+
+        cmd= "UPDATE " + table +" SET " + \
+            ",".join(map(self.__tuple2db_format_set, UPDATE.iteritems() )) + \
+            " WHERE " + " and ".join(map(self.__tuple2db_format_where, WHERE.iteritems() ))
+        print cmd
+        self.cur.execute(cmd)
+        nb_rows = self.cur.rowcount
+        if nb_rows > 0 and log:
+            #inserting new log
+            if uuid is None: uuid_k = uuid_v = ""
+            else: uuid_k=",uuid"; uuid_v=",'" + str(uuid) + "'"
+            cmd = "INSERT INTO logs (related,level%s,description) VALUES ('%s','debug'%s,\"updating %d entry %s\")" \
+                % (uuid_k, table, uuid_v, nb_rows, (str(UPDATE)).replace('"','-')  )
+            print cmd
+            self.cur.execute(cmd)
+        return nb_rows, "%d updated from %s" % (nb_rows, table[:-1] )
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def update_rows(self, table, UPDATE, WHERE, log=False):
+        ''' Update one or several rows into a table.
+        Atributes
+            UPDATE: dictionary with the key: value to change
+            table: table where to update
+            WHERE: dictionary of elements to update
+        Return: (result, descriptive text) where result indicates the number of updated files
+        '''
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor()
+                    return 1, self.__update_rows(table, UPDATE, WHERE, log)
+
+            except (mdb.Error, AttributeError), e:
+                print "nfvo_db.update_rows DB Exception %d: %s" % (e.args[0], e.args[1])
+                # r,c = self.format_error(e)
+
+                # if r!=-HTTP_Request_Timeout or retry_==1: return r,c
+
+
 
     ####################################################################################################################
-    #unused functions so far (before intergration with playnetMANO v2)
+    # helper functions so far (before intergration with playnetMANO v2)
     ####################################################################################################################
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
 
     def __str2db_format(self, data):
         '''Convert string data to database format.
@@ -444,7 +530,9 @@ class resource_db():
             return '"' + out + '"'
         else:
             return json.dumps(out)
-
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
     def __tuple2db_format_set(self, data):
         '''Compose the needed text for a SQL SET, parameter 'data' is a pair tuple (A,B),
         and it returns the text 'A="B"', where A is a field of a table and B is the value
@@ -462,6 +550,9 @@ class resource_db():
         else:
             return str(data[0]) + '=' + json.dumps(out)
 
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
     def __tuple2db_format_where(self, data):
         '''Compose the needed text for a SQL WHERE, parameter 'data' is a pair tuple (A,B),
         and it returns the text 'A="B"', where A is a field of a table and B is the value
@@ -479,6 +570,9 @@ class resource_db():
         else:
             return str(data[0]) + '=' + json.dumps(out)
 
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
     def __tuple2db_format_where_not(self, data):
         '''Compose the needed text for a SQL WHERE(not). parameter 'data' is a pair tuple (A,B),
         and it returns the text 'A<>"B"', where A is a field of a table and B is the value
@@ -496,6 +590,9 @@ class resource_db():
         else:
             return str(data[0]) + '<>' + json.dumps(out)
 
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
     def __remove_quotes(self, data):
         '''remove single quotes ' of any string content of data dictionary'''
         for k,v in data.items():
@@ -510,8 +607,10 @@ class resource_db():
 
 if __name__ == '__main__':
     db = resource_db()
-    #a = db.connect_db(host="localhost", user="root", passwd="S@igon0011", database="rm_db")
-    #cursor = db.con.cursor()
+    a = db.connect_db(host="116.89.184.43", user="root", passwd="", database="mano_db")
+    update = {'total_vcpus_allocated': 55, 'total_vmem_allocated': 66}
+    where = {'uuid': 20}
+    # cursor = db.con.cursor()
     #cursor = db.con.cursor(MySQLdb.cursors.DictCursor)
     #db.add_row_rs('reservation', data) #sh_compute.vmem_op_stats())
     #db.add_row_rs('vcpu_capacity', vcpu) #sh_compute.vmem_op_stats())
@@ -520,8 +619,8 @@ if __name__ == '__main__':
     # db.update_row_timestamp_by_rsv_id(table_name,'12345','2016-04-14 11:11:11','2016-04-15 22:22:22')
     #db.get_rsv_by_id('reservation','12345')
     #db.update_row_capacity_by_uuid('vmem_capacity', 2, vmem_capa)
-    dat_table = db.get_table_capacity('vdisk_capacity')
-    #print dat_table
+    dat_table = db.update_rows('tenants_utilization_compute_rm', update, where, log=False )
+    print dat_table
     # list_rsv = db.get_rsv_by_status('ACTIVE')
     # for rsv in list_rsv:
     #     print rsv

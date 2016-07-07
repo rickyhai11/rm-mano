@@ -16,12 +16,7 @@ from novaclient import client as nClient, exceptions as nvExceptions
 import keystoneclient.v2_0.client as ksClient
 import keystoneclient.exceptions as ksExceptions
 import glanceclient.v2.client as glClient
-import glanceclient.client as gl1Client
-import glanceclient.exc as gl1Exceptions
-from httplib import HTTPException
 from neutronclient.neutron import client as neClient
-from neutronclient.common import exceptions as neExceptions
-from requests.exceptions import ConnectionError
 
 # global global_config
 # global_config = {'db_host': 'localhost',
