@@ -58,6 +58,9 @@ flavorListDefault = [
     'm1.8xlarge'
 ]
 
+# --
+# some helper functions
+#
 def __remove_quotes_in_quotas_limits_list(data):
     '''remove single quotes ' of list of quotas and limits'''
     for k in data:
@@ -103,7 +106,7 @@ def __replace_single_quotes(self, data):
 
 
 # --
-# some helper functions
+# get credentials from openstack services
 #
 def load_creds_env():
     global os_username, os_password, os_auth_url
@@ -1685,16 +1688,29 @@ def get_user_storage_quota():
     '''
     return 0
 
-
-
 def add_quotas_limits_2_db(mydb, table, data):
     result = mydb.add_row_rs(table, data)
     if result > 0:
         print "Added data to %s table successfully"
     return result
 
+def init_users_compute_util_2_db(mydb, table, rsv):
+    # polling compute openstack service for getting updated compute resource usage.
+    # when compute resource value of user is not initiated (empty with that user_id and tenant_id in DB)
+    # Above specification is to identify exactly which user from particular tenant, compute resources would be initiated into DB table
+    data_list = get_user_compute_quota()
+    for data in data_list:
+        if data['user_id'] == rsv['user_id'] and data['tenant_id'] == rsv['tenant_id'] and data['user_name'] != 'admin': # need to exclude admin user as admin-ids are same in all tenants
+            print " Got it ! initiative data for user-id: %s and tenant-id: %s in %s DB table" % (data['user_id'], data['tenant_id'], table)
+            result, added_uuid = mydb.add_row_rs(table, data)
+            yield data, result, added_uuid # at the first meet matched user-id, loop will be broken. save memory than put return out of loop
+    if result == 0:
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        print "WARNING !!! user-id: %s and tenant-id: %s are NOT EXISTING in VIM OR user-id: %s is admin user. Please sign up !!! Thanks." \
+              % (rsv['user_id'], rsv['tenant_id'], rsv['user_id'])
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
 
-#---------------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
 #  START --- Get total capacity of compute resources from hyper-visor of compute node #TODO need to take into account multi-compute nodes scenario
 #---------------------------------------------------------------------------------------------------------------------------
 

@@ -7,11 +7,15 @@ Implemetation capacity management of users in a given tenant.
 
 import sh_rm_monitoring as rm_monitor
 from sh_rm_monitoring import get_nova_client
+from sh_rm_monitoring import get_user_compute_quota
+from sh_rm_monitoring import get_user_network_quota
+from sh_rm_monitoring import get_user_storage_quota
+from sh_rm_monitoring import init_users_compute_util_2_db
 
 
 
 def check_user_compute_capacity(mydb, rsv):
-    list_users_util_cap_tables = ['users_util_compute_rm', 'users_util_network_rm']  # TODO need to add 'users_util_storage_rm' table into this list after finishing implementation
+    list_users_util_cap_tables = ['users_util_compute_rm', 'users_util_network_rm', 'users_util_storage_rm']  # TODO need to add 'users_util_storage_rm' table into this list after finishing implementation
     # flag to identify result of resource check: if true : successfully, otherwise failed
     retrval = True
 
@@ -132,39 +136,39 @@ def load_flavors_by_id(flavor_id):
             return 0
 
 
-def get_current_available_resource(mydb, table_name):
+def get_current_available_resource(mydb, table_name, rsv):
     #print table_name
     #rdb_ = resource_db()
 
-    rows_count, rows = mydb.get_table_capacity(table_name)
+    rows_count, row = mydb.get_newest_row_by_timestamp_userid_tenantid(table_name, rsv)
 
     if rows_count == 0:
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         print "%s table is empty. Initializing available resource values by querying the various Controllers (e.g. Nova, Neutron, Cinder)...." % table_name
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        if table_name == 'vdisk_capacity':
-            init_data = vdisk_op_stats()
-        elif table_name == 'vcpu_capacity':
-            init_data = vcpu_op_stats()
-        elif table_name == 'vmem_capacity':
-            init_data = vmem_op_stats()
+        if table_name == 'users_util_compute_rm':
+            init_data_specified_user, result, added_uuid = init_users_compute_util_2_db(mydb=mydb, table=table_name, rsv=rsv) dang cod den day
+        elif table_name == 'users_util_network_rm':
+            init_data_list = get_user_network_quota()
+        elif table_name == 'users_util_storage_rm':
+            init_data_list = get_user_storage_quota()
         # if capacity resource table is empty, then call add_row_rs() for initializing first capacity resource values
-        result, uuid = mydb.add_row_rs(table_name=table_name, row_dict=init_data)
+        for init_data in init_data_list:
+            result, uuid = mydb.add_row_rs(table_name=table_name, row_dict=init_data)
+            if result > 0:
+                return init_data_list, uuid  #returned uuid that is grabbed from add_row_rs() function
+            else:
+                print "failed to initialize %s value into DB table %s" % table_name
+                print init_data_list
+                return result
 
-        if result > 0:
-            return init_data, uuid  #returned uuid is grabbed from add_row_rs() function
-        else:
-            print "failed to initialize %s value into DB" % init_data
-            return result
-
-    else:
+    elif rows_count > 0:
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        print "compute capacity values are already initialized in DB tables ---> Need to calculating and update existing available resources in DB...."
+        print " user capacity values were already initialized in DB tables %s ---> Need to calculating and update existing available resources in %s table...." %(table_name, table_name)
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         # if capacity resource table is not empty, getting uuid from rows_data dict
         # in this case we have override existing db record, hence in capacity tables just have only one record at a moment
-        for row in rows: #currently just have only one row record in capacity tables. Hence, rows = row =1
-            current_capacity_data = row
-            print "Calculated resource usage --> Updating to DB..."
-            print row
+        current_capacity_data = row
+        print "Calculated resource usage --> Updating to DB..."
+        print row
         return current_capacity_data, current_capacity_data['uuid']

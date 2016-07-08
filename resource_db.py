@@ -1,7 +1,13 @@
 import MySQLdb.cursors
 import MySQLdb as mdb
+import uuid as myUuid
 import json
 import sys
+import yaml
+from collections import OrderedDict
+import requests
+from jsonschema import validate as js_v, exceptions as js_e
+
 
 global global_config
 global_config = {'db_host': 'localhost',
@@ -145,13 +151,13 @@ class resource_db():
             self.cursor.execute(sql, values)
             added = self.cursor.rowcount
             # get last added id in a table
-            added_id = self.cursor.lastrowid  # Returns the value generated for an AUTO_INCREMENT column TODO
-            print added_id
+            added_uuid = self.cursor.lastrowid  # Returns the value generated for an AUTO_INCREMENT column TODO
+            print added_uuid
             self.con.commit()
             if added > 0:
 
                 print "Inserted new row successfully"
-                return added, added_id
+                return added, added_uuid
             else:
                 print "Failed to add a new row into database table: %s" % table_name
                 return added
@@ -327,10 +333,10 @@ class resource_db():
 
 
     ####################################################################################################################
-    # CRUD DB operations which are related to compute and network resources
+    # CRUD DB operations which are related to compute and network resources - CALCULATING AGAINST TOTAL CAPACITY
     ####################################################################################################################
     '''
-    # re-use common adding data to db function for adding new row into db table
+    # RE-USE common adding data into db function above to add a new row into db table
     def add_row_rs(self, table_name, row_dict)
 
     '''
@@ -400,7 +406,7 @@ class resource_db():
                 rows = self.cur.fetchone()
                 listed = self.cur.rowcount
                 print " Query capacity with uuid %s successfully" % uuid
-                print listed
+                print "Number of row returned from table after query = %s " % listed
                 print rows
                 return listed, rows
         except(mdb.Error, AttributeError), e:
@@ -422,11 +428,13 @@ class resource_db():
         except(mdb.Error, AttributeError), e:
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 
-    #**************************
-    # users and tenants based resources management- basic DB operations. Go here
-    #**************************
 
-    def get_newest_row_by_timestamp_user_in_rsv(self, table_name, rsv):
+
+    # ****************************************************************************************************************************************************************
+    # users and tenants based - resources management- basic DB operations. Go here
+    # ****************************************************************************************************************************************************************
+
+    def get_newest_row_by_timestamp_userid_tenantid(self, table_name, rsv):
         '''
         This function is used to query a latest row from users utilization resources tables such as: users_util_compute_rm or users_util_network_rm
         get one row that store current availability of resources, where the selected row has the most recent timestamp
@@ -442,16 +450,185 @@ class resource_db():
                       % (table_name, rsv['user_id'], rsv['tenant_id'])
                 print sql
                 self.cur.execute(sql)
-                rows = self.cur.fetchall()
+                row = self.cur.fetchall()
                 listed = self.cur.rowcount
                 # for row in rows:   # for debug
                 #     print row
                 print " query all of %s table successfully" % table_name
                 # Print out uuid
                 # print rows[0]['uuid']
-                return listed, rows[0]
+                return listed, row[0]
         except(mdb.Error, AttributeError), e:
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
+
+
+    def __add_row_by_userid_tenantid(self, table_name, user_id,tenant_id, row_dict):
+        ''' add_row_resources could be used like global adding function for adding any data with dict/json format to DB
+        for example:
+            if Add a new reservation to reservation table
+            input parameters:
+                table_name: name of table in mySQL DB
+                rowdict: dictionary for reservation attributes as below structure
+                    data = {'reservation_id': '12345',
+                    'label': 'test1',
+                    'host': "hai_compute",
+                    'user': 'ricky',
+                    'project': 'admin',
+                    'start_time': '2016-04-13 12:19:20',
+                    'end_time': '2016-04-13 12:30:20',
+                    'flavor_id': '1',
+                    'image_id': 'asddsds',
+                    'instance_id': "sjdgsjhdgsjh"
+                    'summary': 'reservation testing',
+                    'status': 'ACTIVE'
+                    }
+                    XXX tablename not sanitized
+                    XXX test for allowed keys is case-sensitive
+                    filter out keys that are not column names'''
+
+        self.con
+        self.cursor = self.con.cursor()
+        self.cursor.execute("describe %s" % table_name)
+        self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
+        #print self.allowed_keys
+        self.keys = self.allowed_keys.intersection(row_dict)
+        #print "print keys"
+        #print self.keys
+
+        if len(row_dict) > len(self.keys):
+            unknown_keys = set(row_dict) - self.allowed_keys
+            print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
+
+        columns = ", ".join(self.keys)
+        values_template = ", ".join(["%s"] * len(self.keys))
+        try:
+            sql = "insert into %s (%s) values (%s)" % (
+                table_name, columns, values_template)
+            values = tuple(row_dict[key] for key in self.keys)
+            print sql
+            print values
+            self.cursor.execute(sql, values)
+            added = self.cursor.rowcount
+            # get last added id in a table
+            added_uuid = self.cursor.lastrowid  # Returns the value generated for an AUTO_INCREMENT column TODO
+            print added_uuid
+            self.con.commit()
+            if added > 0:
+
+                print "Inserted new row successfully"
+                return added, added_uuid
+            else:
+                print "Failed to add a new row into database table: %s" % table_name
+                return added
+
+        except (mdb.Error, AttributeError), e:
+            print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
+            self.con.rollback()
+
+
+
+
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def _new_row_internal(self, table, INSERT, tenant_id=None, add_uuid=False, root_uuid=None, log=False):
+        ''' Add one row into a table. It DOES NOT begin or end the transaction, so self.con.cursor must be created
+        Attribute
+            INSERT: dictionary with the key: value to insert
+            table: table where to insert
+            tenant_id: only useful for logs. If provided, logs will use this tenant_id
+            add_uuid: if True, it will create an uuid key entry at INSERT if not provided
+        It checks presence of uuid and add one automatically otherwise
+        Return: (result, uuid) where result can be 0 if error, or 1 if ok
+        '''
+
+        if add_uuid:
+            #create uuid if not provided
+            if 'uuid' not in INSERT:
+                uuid = INSERT['uuid'] = str(myUuid.uuid1()) # create_uuid
+            else:
+                uuid = str(INSERT['uuid'])
+        else:
+            uuid=None
+        if add_uuid:
+            #defining root_uuid if not provided
+            if root_uuid is None:
+                root_uuid = uuid
+            #inserting new uuid
+            cmd = "INSERT INTO uuids (uuid, root_uuid, used_at) VALUES ('%s','%s','%s')" % (uuid, root_uuid, table)
+            print cmd
+            self.cur.execute(cmd)
+        #insertion
+        cmd= "INSERT INTO " + table +" SET " + \
+            ",".join(map(self.__tuple2db_format_set, INSERT.iteritems() ))
+        print cmd
+        self.cur.execute(cmd)
+        nb_rows = self.cur.rowcount
+        #inserting new log
+        if nb_rows > 0 and log:
+            if add_uuid: del INSERT['uuid']
+            if uuid is None: uuid_k = uuid_v = ""
+            else: uuid_k=",uuid"; uuid_v=",'" + str(uuid) + "'"
+            if tenant_id is None: tenant_k = tenant_v = ""
+            else: tenant_k=",nfvo_tenant_id"; tenant_v=",'" + str(tenant_id) + "'"
+            cmd = "INSERT INTO logs (related,level%s%s,description) VALUES ('%s','debug'%s%s,\"new %s %s\")" \
+                % (uuid_k, tenant_k, table, uuid_v, tenant_v, table[:-1], str(INSERT).replace('"','-'))
+            print cmd
+            self.cur.execute(cmd)
+        return nb_rows, uuid
+
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def new_row(self, table, INSERT, tenant_id=None, add_uuid=False, log=False):
+        ''' Add one row into a table.
+        Attribute
+            INSERT: dictionary with the key: value to insert
+            table: table where to insert
+            tenant_id: only useful for logs. If provided, logs will use this tenant_id
+            add_uuid: if True, it will create an uuid key entry at INSERT if not provided
+        It checks presence of uuid and add one automatically otherwise
+        Return: (result, uuid) where result can be 0 if error, or 1 if ok
+        '''
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor()
+                    return self._new_row_internal(table, INSERT, tenant_id, add_uuid, None, log)
+
+            except (mdb.Error, AttributeError), e:
+                print "nfvo_db.new_row DB Exception %d: %s" % (e.args[0], e.args[1])
+                # r,c = self.format_error(e)
+                # if r!=-HTTP_Request_Timeout or retry_==1: return r,c
+
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def __get_rows(self,table,uuid):
+        self.cur.execute("SELECT * FROM " + str(table) +" where uuid='" + str(uuid) + "'")
+        rows = self.cur.fetchall()
+        return self.cur.rowcount, rows
+
+    # **************************
+    # Reused function from PlaynetMano V2 - nfvo_db.py file
+    # **************************
+    def get_rows(self,table,uuid):
+        '''get row from a table based on uuid'''
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor(mdb.cursors.DictCursor)
+                    self.cur.execute("SELECT * FROM " + str(table) +" where uuid='" + str(uuid) + "'")
+                    rows = self.cur.fetchall()
+                    return self.cur.rowcount, rows
+            except (mdb.Error, AttributeError), e:
+                print "nfvo_db.get_rows DB Exception %d: %s" % (e.args[0], e.args[1])
+                # r,c = self.format_error(e)
+                # if r!=-HTTP_Request_Timeout or retry_==1: return r,c
+
 
     # **************************
     # Reused function from PlaynetMano V2 - nfvo_db.py file
@@ -481,7 +658,7 @@ class resource_db():
                 % (uuid_k, table, uuid_v, nb_rows, (str(UPDATE)).replace('"','-')  )
             print cmd
             self.cur.execute(cmd)
-        return nb_rows, "%d updated from %s" % (nb_rows, table[:-1] )
+        return nb_rows, "%d updated from %s" % (nb_rows, table[:-1])
 
     # **************************
     # Reused function from PlaynetMano V2 - nfvo_db.py file
@@ -506,6 +683,54 @@ class resource_db():
 
                 # if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
+    def get_table(self, **sql_dict):
+        ''' Obtain rows from a table.
+        Attribute sql_dir: dictionary with the following key: value
+            'SELECT': (list or tuple of fields to retrieve) (by default all)
+            'FROM': string of table name (Mandatory)
+            'WHERE': dict of key:values, translated to key=value AND ... (Optional)
+            'WHERE_NOT': dict of key:values, translated to key<>value AND ... (Optional)
+            'WHERE_NOTNULL': (list or tuple of items that must not be null in a where ... (Optional)
+            'LIMIT': limit of number of rows (Optional)
+        Return: a list with dictionaries at each row
+        '''
+        #print sql_dict
+        select_= "SELECT " + ("*" if 'SELECT' not in sql_dict else ",".join(map(str,sql_dict['SELECT'])) )
+        #print 'select_', select_
+        from_  = "FROM " + str(sql_dict['FROM'])
+        #print 'from_', from_
+        if 'WHERE' in sql_dict and len(sql_dict['WHERE']) > 0:
+            w=sql_dict['WHERE']
+            where_ = "WHERE " + " AND ".join(map(self.__tuple2db_format_where, w.iteritems() ))
+        else: where_ = ""
+        if 'WHERE_NOT' in sql_dict and len(sql_dict['WHERE_NOT']) > 0:
+            w=sql_dict['WHERE_NOT']
+            where_2 = " AND ".join(map(self.__tuple2db_format_where_not, w.iteritems() ) )
+            if len(where_)==0:   where_ = "WHERE " + where_2
+            else:                where_ = where_ + " AND " + where_2
+        if 'WHERE_NOTNULL' in sql_dict and len(sql_dict['WHERE_NOTNULL']) > 0:
+            w=sql_dict['WHERE_NOTNULL']
+            where_2 = " AND ".join(map( lambda x: str(x) + " is not Null",  w) )
+            if len(where_)==0:   where_ = "WHERE " + where_2
+            else:                where_ = where_ + " AND " + where_2
+        #print 'where_', where_
+        limit_ = "LIMIT " + str(sql_dict['LIMIT']) if 'LIMIT' in sql_dict else ""
+        #print 'limit_', limit_
+        cmd =  " ".join( (select_, from_, where_, limit_) )
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor(mdb.cursors.DictCursor)
+                    print cmd
+                    self.cur.execute(cmd)
+
+                    rows = self.cur.fetchall()
+
+                    return self.cur.rowcount, rows
+            except (mdb.Error, AttributeError), e:
+                print "nfvo_db.get_table DB Exception %d: %s" % (e.args[0], e.args[1])
+                # r,c = self.format_error(e)
+                # if r!=-HTTP_Request_Timeout or retry_==1: return r,c
 
 
     ####################################################################################################################
