@@ -11,64 +11,58 @@ from sh_rm_monitoring import get_user_compute_quota
 from sh_rm_monitoring import get_user_network_quota
 from sh_rm_monitoring import get_user_storage_quota
 from sh_rm_monitoring import init_users_compute_util_2_db
+import todo
 
+import datetime
 
 
 def check_user_compute_capacity(mydb, rsv):
-    list_users_util_cap_tables = ['users_util_compute_rm', 'users_util_network_rm', 'users_util_storage_rm']  # TODO need to add 'users_util_storage_rm' table into this list after finishing implementation
+    list_users_util_cap_tables = ['users_util_compute_rm'] # ,'users_util_network_rm', 'users_util_storage_rm']  # TODO need to add 'users_util_storage_rm' table into this list after finishing implementation
     # flag to identify result of resource check: if true : successfully, otherwise failed
     retrval = True
-
     reserved_rs = calculate_reserved_compute_rs_by_flavor(rsv)
-    # print reserved_rs
+    print reserved_rs
     for table in list_users_util_cap_tables:
-        current_rs_capacity, uuid = get_current_available_resource(mydb=mydb, table_name=table)
-        # print "current_rs_capacity"
-        # print current_rs_capacity
+        current_rs_capacity, uuid = get_current_available_resource(mydb=mydb, table_name=table, rsv=rsv)
+        print " print out current_rs_capacity dict"
+        print current_rs_capacity
 
-        if table == 'vcpu_capacity' and reserved_rs['vcpu_reserved'] >= current_rs_capacity['vcpu_available']:
-            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table, table)
+        # if table == 'users_util_compute_rm':
+        if table == 'users_util_compute_rm' and int(reserved_rs['reserved_vcpus']) >= int(current_rs_capacity['available_vcpus']):
+            print "Request is rejected due to lack of VCPUs. Resources request from user-id : %s in tenant-id: %s for VCPUs is not satisfied. Debug-DB table %s" % (rsv['user_id'], rsv['tenant_id'], table)
             retrval = False
             break
 
-        elif table == 'vmem_capacity' and reserved_rs['vmem_reserved'] >= current_rs_capacity['vmem_available']:
-            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table, table)
+        elif table == 'users_util_compute_rm' and int(reserved_rs['reserved_vmem']) >= int(current_rs_capacity['available_vmem']):
+            print "Request is rejected due to lack of VMEM. Resources request from user-id : %s in tenant-id: %s for VMEM is not satisfied. Debug-DB table %s" % (rsv['user_id'], rsv['tenant_id'], table)
             retrval = False
             break
 
-        elif table == 'vdisk_capacity' and reserved_rs['disk_reserved'] >= current_rs_capacity['disk_available']:
-            print "Request is rejected due to lack of %s resources. Resources request for %s is not satisfied." %(table, table)
+        elif table == 'users_util_compute_rm' and int(rsv['number_vnfs']) >= int(current_rs_capacity['available_vnfs']):
+            print "Request is rejected, requested number vnfs from user-id : %s in tenant-id: %s is over limitation. Please adjust quota for addtional resources. Debug-DB table %s" % (rsv['user_id'], rsv['tenant_id'], table)
             retrval = False
             break
 
         else:
             print '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-            print " Checked ! Enough resource capacity for reservation. Go ahead for reserved resources in advance"
+            print " Checked ! Enough compute resources for reservation. Go ahead for reserving resources in advance."
             print '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-            #rb_ = resource_db()
+            print " Recalculating resources and Updating to %s DB table" % table
+            print '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
             new_rs_capacity = current_rs_capacity
+            if retrval:
+                print "Print out retrval flag : %s " %retrval
 
-            if table == 'vcpu_capacity' and retrval:
-                # print retrval
-                new_rs_capacity['vcpu_available'] = int(current_rs_capacity['vcpu_available']) - int(reserved_rs['vcpu_reserved'])
-                new_rs_capacity['vcpu_reserved'] = int(reserved_rs['vcpu_reserved'])
-                # print "new_rs_capacity da nhay vao trong checked owr vcpu capacity"
+                new_rs_capacity['available_vcpus'] = int(current_rs_capacity['available_vcpus']) - int(reserved_rs['reserved_vcpus'])
+                new_rs_capacity['reserved_vcpus'] = int(reserved_rs['reserved_vcpus'])
+                new_rs_capacity['available_vmem'] = int(current_rs_capacity['available_vmem']) - int(reserved_rs['reserved_vmem'])
+                new_rs_capacity['reserved_vmem'] = int(reserved_rs['reserved_vmem'])
+                new_rs_capacity['available_vnfs'] = int(current_rs_capacity['available_vnfs']) - int(reserved_rs['reserved_vnfs'])
+                new_rs_capacity['reserved_vnfs'] = int(reserved_rs['reserved_vnfs'])
+                new_rs_capacity['created_at'] = datetime.datetime.now()
                 print new_rs_capacity
-                mydb.update_row_capacity_by_uuid(table_name=table, uuid=uuid, new_values_dict=new_rs_capacity)
-                retrval = True
-
-            elif table == 'vmem_capacity' and retrval:
-                new_rs_capacity['vmem_available'] = int(current_rs_capacity['vmem_available']) - int(reserved_rs['vmem_reserved'])
-                new_rs_capacity['vmem_reserved'] = int(reserved_rs['vmem_reserved'])
-
-                mydb.update_row_capacity_by_uuid(table_name=table, uuid=uuid, new_values_dict=new_rs_capacity)
-                retrval = True
-
-            elif table == 'vdisk_capacity' and retrval:
-                new_rs_capacity['disk_available'] = int(current_rs_capacity['disk_available']) - int(reserved_rs['disk_reserved'])
-                new_rs_capacity['disk_reserved'] = int(reserved_rs['disk_reserved'])
-                mydb.update_row_capacity_by_uuid(table_name=table, uuid=uuid, new_values_dict=new_rs_capacity)
-                retrval = True
+                # mydb.add_row_rs(table_name=table, row_dict=new_rs_capacity)
+                mydb.update_row_capacity_by_uuid(table_name=table, uuid=new_rs_capacity['uuid'], new_values_dict=new_rs_capacity)
     return retrval
 
 def calculate_reserved_compute_rs_by_flavor(rsv):
@@ -88,6 +82,7 @@ def calculate_reserved_compute_rs_by_flavor(rsv):
     if number_vnfs == 1:
         reserved_rs_dict['reserved_vcpus'] = flavor_details['vcpu']
         reserved_rs_dict['reserved_vmem'] = flavor_details['vmem']
+        reserved_rs_dict['reserved_vnfs'] = rsv['number_vnfs']
         reserved_rs_dict['reserved_vdisk'] = flavor_details['vdisk'] # TODO: this field should be moved to cinder-storage due to recent change between nova and cinder related to "vdisk"
 
         print " Detected that number of vnfs within reservation is: 1 , Reserved COMPUTE resources accordingly is: %s" % reserved_rs_dict
@@ -137,8 +132,6 @@ def load_flavors_by_id(flavor_id):
 
 
 def get_current_available_resource(mydb, table_name, rsv):
-    #print table_name
-    #rdb_ = resource_db()
 
     rows_count, row = mydb.get_newest_row_by_timestamp_userid_tenantid(table_name, rsv)
 
@@ -147,28 +140,22 @@ def get_current_available_resource(mydb, table_name, rsv):
         print "%s table is empty. Initializing available resource values by querying the various Controllers (e.g. Nova, Neutron, Cinder)...." % table_name
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         if table_name == 'users_util_compute_rm':
-            init_data_specified_user, result, added_uuid = init_users_compute_util_2_db(mydb=mydb, table=table_name, rsv=rsv) dang cod den day
+            init_data_current_user, result, added_uuid = init_users_compute_util_2_db(mydb=mydb, table=table_name, rsv=rsv)
+            return init_data_current_user, added_uuid
+
         elif table_name == 'users_util_network_rm':
-            init_data_list = get_user_network_quota()
+            todo
         elif table_name == 'users_util_storage_rm':
-            init_data_list = get_user_storage_quota()
-        # if capacity resource table is empty, then call add_row_rs() for initializing first capacity resource values
-        for init_data in init_data_list:
-            result, uuid = mydb.add_row_rs(table_name=table_name, row_dict=init_data)
-            if result > 0:
-                return init_data_list, uuid  #returned uuid that is grabbed from add_row_rs() function
-            else:
-                print "failed to initialize %s value into DB table %s" % table_name
-                print init_data_list
-                return result
+            todo
 
     elif rows_count > 0:
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        print " user capacity values were already initialized in DB tables %s ---> Need to calculating and update existing available resources in %s table...." %(table_name, table_name)
+        print " users resource usage values were already initialized in DB tables %s ---> Need to calculating and update existing resource values in %s table...." \
+              % (table_name, table_name)
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         # if capacity resource table is not empty, getting uuid from rows_data dict
         # in this case we have override existing db record, hence in capacity tables just have only one record at a moment
         current_capacity_data = row
         print "Calculated resource usage --> Updating to DB..."
         print row
-        return current_capacity_data, current_capacity_data['uuid']
+        return current_capacity_data[0], (current_capacity_data[0])['uuid']

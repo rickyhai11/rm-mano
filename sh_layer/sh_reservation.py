@@ -1,9 +1,10 @@
 import todo
 import resource_db
+from resource_db import resource_db
 import vimconn
-from sh_capacity import check_resource_capacity
-from sh_capacity import calculate_reserved_compute_rs_by_flavor
-from sh_capacity import get_current_available_resource
+from sh_tenant_user_based_cap import check_user_compute_capacity
+from sh_tenant_user_based_cap import calculate_reserved_compute_rs_by_flavor
+from sh_tenant_user_based_cap import get_current_available_resource
 
 from multiprocessing import Process
 import sys
@@ -19,32 +20,30 @@ import glanceclient.v2.client as glClient
 from neutronclient.neutron import client as neClient
 
 # global global_config
-# global_config = {'db_host': 'localhost',
+# global_config = {'db_host': '116.89.184.43',
 #                   'db_user': 'root',
-#                   'db_passwd': 'S@igon0011',
-#                   'db_name': 'rm_db'
+#                   'db_passwd': '',
+#                   'db_name': 'mano_db'
 #                  }
 # global data
-# data = {'reservation_id': '6789',
-#         'label': 'test2',
-#         'host_id': "12212817268DJKHSAJD",
+# data = {'reservation_id': '5555',
+#         'label': 'test4',
+#         'host_id': "cfcb18eef55b4b03bb075ea106fe771f",
 #         'host_name': 'hai_compute',
-#         'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
-#         'user_name': 'admin',
-#         'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-#         'tenant_name': 'admin',
-#         'start_time': '2016-04-21 12:11:11',
-#         'end_time': '2016-04-21 12:22:22',
-#         'flavor_id': '1',
-#         'image_id': '3d356f2b-79da-468e-8e31-ec0c861190e1',
+#         'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
+#         'user_name': 'demo',
+#         'tenant_id': '4a766494021447c7905b81adae050a97',
+#         'tenant_name': 'demo',
+#         'start_time': '2016-05-23 18:04:00',
+#         'end_time': '2016-05-23 18:09:00',
+#         'flavor_id': 1,
+#         'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
 #         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
 #         'number_instance': '1',
-#         'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-#         'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+#         'ns_id': 'cfcb18eef55b4b03bb075ea106fe771f',
 #         'status': 'ACTIVE',
 #         'summary': 'reservation testing'
 #         }
-#
 # vmem_capa= {'uuid': 3, "mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
 #
 # vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
@@ -58,10 +57,9 @@ class sh_reservation():
         todo
 
     def create_reservation(self, mydb, data):
-        rp = check_resource_capacity(mydb=mydb, rsv=data)
+        print "Checking available resources. Please be patient..."
+        rp = check_user_compute_capacity(mydb=mydb, rsv=data)
         if rp:
-            print "Checking available resources. Please be patient..."
-            #rdb_ = rdb.resource_db()
             result = mydb.add_row_rs('reservation', data)
             if result > 0:
                 print "created reservation successfully "
@@ -69,16 +67,13 @@ class sh_reservation():
         else:
             print 'Resources error occurred: resources are exhausted. Please recheck'
 
-    def delete_reservation(self, mydb, reservation_id):
-        #rdb_ = rdb.resource_db()
-        result = mydb.delete_row_by_rsv_id(table_name='reservation', reservation_id=reservation_id)
+    def delete_reservation(self, table, mydb, reservation_id):
+        result = mydb.delete_row_by_rsv_id(table_name=table, reservation_id=reservation_id)
         if result > 0:
-            print "deleted successfully a reservation with reservation_id: %s" % reservation_id
+            print "deleted successfully a reservation with reservation_id: %s in table %s" % (reservation_id, table)
             return result, reservation_id
 
-
     def update_reservation(self, mydb, reservation_id, new_values_dict):
-        # rdb_ = rdb.resource_db()
         result, reservation_id = mydb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
                                                     new_values_dict=new_values_dict)
         if result > 0:
@@ -86,7 +81,6 @@ class sh_reservation():
             return result, reservation_id
 
     def update_time_stamp_reservation(self, mydb, reservation_id, start_time, end_time):
-        # rdb_ = rdb.resource_db()
         result = mydb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
                                                     start_time=start_time, end_time=end_time)
         if result > 0:
@@ -97,7 +91,6 @@ class sh_reservation():
         todo
 
     def list_all_created_rsv(self, mydb):
-            #rdb_ = rdb.resource_db()
             list_created_rsv = mydb.get_rsv_by_status(status='ACTIVE')
             print list_created_rsv
             return list_created_rsv
@@ -110,36 +103,38 @@ class sh_control():
         todo
 
     def start_time_trigger(self, mydb):
-        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
-                                                  url_admin="", user="admin", passwd="stack")
+        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
+                                                  url_admin="", user="admin", passwd="fncp2015")
         reservations = sh_reservation()
         print "start_time_trigger process is running"
+        rsv_vnf_auth_dict = {}
         while True:
             rsvs = reservations.list_all_created_rsv(mydb)
             for rsv in rsvs:
                 print rsv
                 start_time = rsv['start_time']
-                reservation_id = rsv['reservation_id']
                 image_id = rsv['image_id']
-                network_id = rsv['network_id'] # TODO currently not added network_id to reservation table and network table is not created as well
+                network_id = rsv['network_id']
                 if (abs(start_time - datetime.datetime.now()) < datetime.timedelta(minutes=1)):
-                    res, vapp_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
+                    res, vnf_id, image_name, assigned_ip = nproject.new_project_vapp(project_id='admin',
                         image_id=image_id,
                             network_id=network_id,
                                 description='vm_test01')
                     time.sleep(2)
-                    #rdb_ = rdb.resource_db()  #call for resource_db() class
-                    mydb.update_row_vapp_id_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
-                                                      vapp_id=vapp_id)
-
-                    print "created instance successfully"
+                    # initiate rsv_vnf_auth_dict to insert into rsv_vnf_auth_rm DB table after vnf is created and vnf_id has been returned
+                    rsv_vnf_auth_dict['reservation_id'] = rsv['reservation_id']
+                    rsv_vnf_auth_dict['vnf_id'] = vnf_id
+                    print "Print out rsv_vnf_auth_dict:"
+                    print rsv_vnf_auth_dict
+                    mydb.add_row_rs(table_name='rsv_vnf_auth_rm', row_dict=rsv_vnf_auth_dict)
+                    print "Created vnf successfully"
             time.sleep(100)
 
 
     def end_time_trigger(self, mydb):
 
-        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://223.194.33.59:5000/v2.0",
-                                                  url_admin="", user="admin", passwd="stack")
+        nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
+                                                  url_admin="", user="admin", passwd="fncp2015")
         reservations = sh_reservation()
         print "end_time_trigger process is running"
         while True:
@@ -147,14 +142,16 @@ class sh_control():
             for rsv in rsvs:
                 print rsv
                 end_time = rsv['end_time']
-                vapp_id = rsv['instance_id']
                 reservation_id = rsv['reservation_id']
+                listed, row = mydb.get_rsv_by_id(table_name='rsv_vnf_auth_rm', reservation_id=reservation_id)
+                vnf_id = row['vnf_id']
                 if (abs(end_time - datetime.datetime.now()) <= datetime.timedelta(minutes=1)):
-                    nproject.delete_vapp(vapp_id)
+                    nproject.delete_vapp(vnf_id)
                     time.sleep(3)
-                    reservations.delete_reservation(mydb=mydb, reservation_id=reservation_id)
+                    reservations.delete_reservation(mydb=mydb, table='reservation', reservation_id=reservation_id)
+                    reservations.delete_reservation(mydb=mydb, table='rsv_vnf_auth_rm', reservation_id=reservation_id)
+
                     break
-                    #return result, reservation_id
             time.sleep(2)
 
 

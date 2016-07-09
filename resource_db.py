@@ -245,7 +245,7 @@ class resource_db():
         except (mdb.Error, AttributeError), e:
             print "resource_db.update_row_capacity_by_uuid DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    def update_row_vapp_id_by_rsv_id(self, table_name, reservation_id, vapp_id):
+    def update_row_vnf_id_by_rsv_id(self, table_name, reservation_id, vnf_id):
         '''
         this function is to update values for a reservation
 
@@ -255,16 +255,15 @@ class resource_db():
         and instance has been created
         :return:
         '''
-        #self.con = self.reload_connect_db()
         try:
             with self.con:
                 self.cur= self.con.cursor()
-                sql = "UPDATE %s SET instance_id='%s' WHERE reservation_id = '%s'" % (table_name,
-                                                                            vapp_id, reservation_id)
+                sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s'" % (table_name,
+                                                                            vnf_id, reservation_id)
                 print sql
                 self.cur.execute(sql)
                 updated = self.cur.rowcount
-                print "Updated vapp_id: %s successfully for %s reservation" % (vapp_id, updated)
+                print "Updated vapp_id: %s successfully for %s reservation" % (vnf_id, updated)
             return updated
         except (mdb.Error, AttributeError), e:
             print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
@@ -454,10 +453,10 @@ class resource_db():
                 listed = self.cur.rowcount
                 # for row in rows:   # for debug
                 #     print row
-                print " query all of %s table successfully" % table_name
+                print " Query latest row in %s table with user-id: %s and tenant-id: %s successfully" % (table_name, rsv['user_id'], rsv['tenant_id'])
                 # Print out uuid
                 # print rows[0]['uuid']
-                return listed, row[0]
+                return listed, row
         except(mdb.Error, AttributeError), e:
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 

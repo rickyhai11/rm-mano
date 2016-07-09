@@ -11,28 +11,27 @@ import types
 import threading
 
 global global_config
-global_config = {'db_host': 'localhost',
+global_config = {'db_host': '116.89.184.43',
                   'db_user': 'root',
-                  'db_passwd': 'S@igon0011',
-                  'db_name': 'rm_db'
+                  'db_passwd': '',
+                  'db_name': 'mano_db'
                  }
 global data
-data = {'reservation_id': '67819',
+data = {'reservation_id': '5555',
         'label': 'test4',
-        'host_id': "12212817268DJKHSAJD",
+        'host_id': "cfcb18eef55b4b03bb075ea106fe771f",
         'host_name': 'hai_compute',
-        'user_id': '48c70b9e59c240768bb2b88ffb1eb66c',
-        'user_name': 'admin',
-        'tenant_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-        'tenant_name': 'admin',
-        'start_time': '2016-05-23 18:04:00',
-        'end_time': '2016-05-23 18:09:00',
+        'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
+        'user_name': 'demo',
+        'tenant_id': '4a766494021447c7905b81adae050a97',
+        'tenant_name': 'demo',
+        'start_time': '2016-07-09 18:04:00',
+        'end_time': '2016-07-09 18:09:00',
         'flavor_id': 1,
-        'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
-        'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-        'number_instance': '1',
-        'instance_id': 'null',   # this attribute need to be updated after instance is created (start_time arrived)
-        'ns_id': 'SJDHS765327SDHJSG8236BSD826734',
+        'image_id': '68e9fa2a-afa2-4e32-8598-35cea0f704fa',
+        'network_id': '2d54f36a-8569-4a71-806c-f563a9aa6367',
+        'number_vnfs': '1',
+        'ns_id': 'cfcb18eef55b4b03bb075ea106fe771f',
         'status': 'ACTIVE',
         'summary': 'reservation testing'
         }

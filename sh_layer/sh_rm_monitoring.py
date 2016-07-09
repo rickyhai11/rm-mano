@@ -1694,7 +1694,7 @@ def add_quotas_limits_2_db(mydb, table, data):
         print "Added data to %s table successfully"
     return result
 
-def init_users_compute_util_2_db(mydb, table, rsv):
+def __init_users_compute_util_2_db(mydb, table, rsv):
     # polling compute openstack service for getting updated compute resource usage.
     # when compute resource value of user is not initiated (empty with that user_id and tenant_id in DB)
     # Above specification is to identify exactly which user from particular tenant, compute resources would be initiated into DB table
@@ -1703,13 +1703,24 @@ def init_users_compute_util_2_db(mydb, table, rsv):
         if data['user_id'] == rsv['user_id'] and data['tenant_id'] == rsv['tenant_id'] and data['user_name'] != 'admin': # need to exclude admin user as admin-ids are same in all tenants
             print " Got it ! initiative data for user-id: %s and tenant-id: %s in %s DB table" % (data['user_id'], data['tenant_id'], table)
             result, added_uuid = mydb.add_row_rs(table, data)
-            yield data, result, added_uuid # at the first meet matched user-id, loop will be broken. save memory than put return out of loop
-    if result == 0:
-        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        print "WARNING !!! user-id: %s and tenant-id: %s are NOT EXISTING in VIM OR user-id: %s is admin user. Please sign up !!! Thanks." \
-              % (rsv['user_id'], rsv['tenant_id'], rsv['user_id'])
-        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+            print type(data)
+            return data, result, added_uuid # at the first meet matched user-id, loop will be broken. save memory than put return out of loop
 
+def init_users_compute_util_2_db(mydb, table, rsv):
+    init_data, result, added_uuid = __init_users_compute_util_2_db(mydb, table, rsv)
+    print type(init_data)
+    if result > 0 and init_data is not None:
+        print "Initiated dat for %s table successfully"
+        return init_data, result, added_uuid
+    elif result == 0 and init_data is None: # if we see this error TypeError: 'NoneType' object is not iterable, that means code jumps to here
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        print " FAILED to initiate data into DB table %s because user-id=%s and tenant-id=%s from RESERVATION request CAN NOT be found in DB table %s " \
+              "--> init_data is empty" % (table,rsv['user_id'], rsv['tenant_id'], table)
+        print "==========================================================================================================================="
+        print "WARNING !!! user-id: %s and tenant-id: %s from RESERVATION request are NOT EXISTING in DB and VIM OR user-id: %s is admin user." \
+              " Please sign up !!! Thanks." % (rsv['user_id'], rsv['tenant_id'], rsv['user_id'])
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        return result
 # ---------------------------------------------------------------------------------------------------------------------------
 #  START --- Get total capacity of compute resources from hyper-visor of compute node #TODO need to take into account multi-compute nodes scenario
 #---------------------------------------------------------------------------------------------------------------------------
