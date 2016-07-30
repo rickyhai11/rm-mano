@@ -262,5 +262,32 @@ class vimconnector():
         '''
         raise NotImplementedError( "Should have implemented this" )
 
+    # ++++++++++++++++++++
+    # Abstract base functions for TENANT quota management go here
+    # ++++++++++++++++++++
+    def get_resource_usages(self, tenant_id):
+        '''Collects resource usages for a given project/tenant
+
+        :params: tenant_id
+        :return: dictionary of corresponding resources with its usage
+        '''
+
+    def update_quota_limits(self, tenant_id, new_quota):
+        '''Updates quota limits for a given project/tenant
+
+        :params: tenant_id, dictionary with the quota limits to update
+        :return: Nothing
+        '''
+
+    def delete_quota_limits(self, tenant_id):
+        '''Delete quota limits for a given project/tenant
+
+        :params: tenant_id
+        :return: Nothing
+        '''
+
+
+
+
         
 

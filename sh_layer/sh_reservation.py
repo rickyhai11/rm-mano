@@ -1,23 +1,16 @@
-import todo
-import resource_db
-from resource_db import resource_db
-import vimconn
-from sh_tenant_user_based_cap import check_user_compute_capacity
-from sh_tenant_user_based_cap import calculate_reserved_compute_rs_by_flavor
-from sh_tenant_user_based_cap import get_current_available_resource
-
-from multiprocessing import Process
-import sys
-import json
-import time
 import datetime
-import threading
+import time
 
-from novaclient import client as nClient, exceptions as nvExceptions
-import keystoneclient.v2_0.client as ksClient
-import keystoneclient.exceptions as ksExceptions
 import glanceclient.v2.client as glClient
+import keystoneclient.exceptions as ksExceptions
+import keystoneclient.v2_0.client as ksClient
 from neutronclient.neutron import client as neClient
+from novaclient import client as nClient, exceptions as nvExceptions
+
+import todo
+from sh_layer.drivers import vimconn
+from sh_tenant_user_based_cap import check_user_compute_capacity
+
 
 # global global_config
 # global_config = {'db_host': '116.89.184.43',

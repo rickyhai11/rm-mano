@@ -4,20 +4,21 @@
 osconnector implements all the methods to interact with openstack using the python-client.
 '''
 
-import vimconn
 import json
 import time
+from httplib import HTTPException
 
-from novaclient import client as nClient, exceptions as nvExceptions
-import keystoneclient.v2_0.client as ksClient
-import keystoneclient.exceptions as ksExceptions
-import glanceclient.v2.client as glClient
 import glanceclient.client as gl1Client
 import glanceclient.exc as gl1Exceptions
-from httplib import HTTPException
-from neutronclient.neutron import client as neClient
+import glanceclient.v2.client as glClient
+import keystoneclient.exceptions as ksExceptions
+import keystoneclient.v2_0.client as ksClient
 from neutronclient.common import exceptions as neExceptions
+from neutronclient.neutron import client as neClient
+from novaclient import client as nClient, exceptions as nvExceptions
 from requests.exceptions import ConnectionError
+
+import vimconn
 
 '''contain the openstack virtual machine status to playnetmano status'''
 vmStatus2manoFormat={'ACTIVE':'ACTIVE',
@@ -95,7 +96,7 @@ class vimconnector(vimconn.vimconnector):
             else:
                 raise TypeError, 'url param can not be NoneType'
         else:
-            vimconn.vimconnector.__setitem__(self,index, value)
+            vimconn.vimconnector.__setitem__(self, index, value)
      
     def _reload_connection(self):
         '''Called before any operation, it check if credentials has changed

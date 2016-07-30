@@ -433,7 +433,7 @@ class resource_db():
     # users and tenants based - resources management- basic DB operations. Go here
     # ****************************************************************************************************************************************************************
 
-    def get_newest_row_by_timestamp_userid_tenantid(self, table_name, rsv):
+    def get_newest_row_by_timestamp_userid_tenantid(self, table_name, user_id, tenant_id):
         '''
         This function is used to query a latest row from users utilization resources tables such as: users_util_compute_rm or users_util_network_rm
         get one row that store current availability of resources, where the selected row has the most recent timestamp
@@ -446,14 +446,14 @@ class resource_db():
             with self.con:
                 self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
                 sql = "SELECT * FROM (SELECT * FROM %s WHERE user_id='%s' and tenant_id='%s' ORDER BY modified_at DESC LIMIT 1) A GROUP BY modified_at, uuid" \
-                      % (table_name, rsv['user_id'], rsv['tenant_id'])
+                      % (table_name, user_id, tenant_id)
                 print sql
                 self.cur.execute(sql)
                 row = self.cur.fetchall()
                 listed = self.cur.rowcount
                 # for row in rows:   # for debug
                 #     print row
-                print " Query latest row in %s table with user-id: %s and tenant-id: %s successfully" % (table_name, rsv['user_id'], rsv['tenant_id'])
+                print " Query latest row in %s table with user-id: %s and tenant-id: %s successfully" % (table_name, user_id, tenant_id)
                 # Print out uuid
                 # print rows[0]['uuid']
                 return listed, row
@@ -461,29 +461,14 @@ class resource_db():
             print "resource_db.get_table_capacity DB exception %d: %s" % (e.args[0], e.args[1])
 
 
-    def __add_row_by_userid_tenantid(self, table_name, user_id,tenant_id, row_dict):
+    def __add_row_by_userid_tenantid(self, table_name, user_id, tenant_id, row_dict):
         ''' add_row_resources could be used like global adding function for adding any data with dict/json format to DB
         for example:
             if Add a new reservation to reservation table
             input parameters:
                 table_name: name of table in mySQL DB
-                rowdict: dictionary for reservation attributes as below structure
-                    data = {'reservation_id': '12345',
-                    'label': 'test1',
-                    'host': "hai_compute",
-                    'user': 'ricky',
-                    'project': 'admin',
-                    'start_time': '2016-04-13 12:19:20',
-                    'end_time': '2016-04-13 12:30:20',
-                    'flavor_id': '1',
-                    'image_id': 'asddsds',
-                    'instance_id': "sjdgsjhdgsjh"
-                    'summary': 'reservation testing',
-                    'status': 'ACTIVE'
-                    }
-                    XXX tablename not sanitized
-                    XXX test for allowed keys is case-sensitive
-                    filter out keys that are not column names'''
+                rowdict: dictionary that include attributes regarding to kind of resource
+        '''
 
         self.con
         self.cursor = self.con.cursor()
