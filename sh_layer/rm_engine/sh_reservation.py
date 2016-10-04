@@ -7,9 +7,9 @@ import keystoneclient.v2_0.client as ksClient
 from neutronclient.neutron import client as neClient
 from novaclient import client as nClient, exceptions as nvExceptions
 
-import todo
 from sh_layer.drivers import vimconn
-from sh_tenant_user_based_cap import check_user_compute_capacity
+from sh_layer.rm_engine.sh_quota_manager import check_user_compute_capacity
+from utils import todo
 
 
 # global global_config
@@ -88,7 +88,8 @@ class sh_reservation():
             print list_created_rsv
             return list_created_rsv
 
-
+def reservation_expire(context):
+    return
 
 class sh_control():
 
@@ -358,7 +359,7 @@ class vimconnector(vimconn.vimconnector):
 # def get_connect_db():
 #     mydb = resource_db.resource_db()
 #     print mydb
-#     if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+#     if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
 #         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
 #         exit(-1)
 #     return mydb

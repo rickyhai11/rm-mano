@@ -1,13 +1,8 @@
-import resource_db
-from sh_layer import sh_reservation
-# from sh_reservation import end_time_trigger, start_time_trigger
-import sh_capacity
+from sh_layer.rm_db import resource_db
 
-import multiprocessing
-import sys
-import os
-import copy_reg
-import types
+# from sh_reservation import end_time_trigger, start_time_trigger
+from sh_layer.rm_engine import sh_total_quota_manager, sh_reservation
+
 import threading
 
 global global_config
@@ -70,7 +65,7 @@ if __name__ == "__main__":
     try:
         mydb = resource_db.resource_db()
         print mydb
-        if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+        if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
         sh_rsv = sh_reservation.sh_reservation()
@@ -78,7 +73,7 @@ if __name__ == "__main__":
         create_rsv = sh_rsv.create_reservation(mydb, data)
 
         sh_reservation.global_config = global_config
-        sh_capacity.global_config = global_config
+        sh_total_quota_manager.global_config = global_config
 
         # p1 = multiprocessing.Process(target=process, args=())
         # print p1
@@ -111,7 +106,7 @@ if __name__ == "__main__":
 #     try:
 #
 #         mydb = resource_db.resource_db()
-#         if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+#         if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
 #             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
 #             exit(-1)
 #         sh_reservation.global_config = global_config

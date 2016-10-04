@@ -13,7 +13,7 @@ config = {
     'AUTH_URL': "http://116.89.184.94:5000/v2.0/",
     'USERNAME': "admin",
     'PASSWORD': "fncp2015",
-    'TENANT_ID': "1975c8ee1c7c4229bdd909ad662fcbe6",
+    'TENANT_ID': "f4211c8eee044bfb9dea2050fef2ace5",
     'TENANT_NAME': "admin",
     'SERVICE_TYPE': 'compute'}
 

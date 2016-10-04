@@ -1,13 +1,9 @@
-import sys
 import json
 
-import todo
-from  resource_db import resource_db
-from sh_total_compute_capacity_util_poll_op import vcpu_op_stats
-from sh_total_compute_capacity_util_poll_op import vdisk_op_stats
-from sh_total_compute_capacity_util_poll_op import vmem_op_stats
-from sh_total_compute_capacity_util_poll_op import load_flavors_by_id
-import sh_total_networks_capacity_util_poll_op
+from sh_layer.rm_monitor.sh_openstack_nova_plugin import load_flavors_by_id
+from sh_layer.rm_monitor.sh_openstack_nova_plugin import vcpu_op_stats
+from sh_layer.rm_monitor.sh_openstack_nova_plugin import vdisk_op_stats
+from sh_layer.rm_monitor.sh_openstack_nova_plugin import vmem_op_stats
 
 global global_config
 
@@ -51,20 +47,20 @@ def check_resource_capacity(mydb, rsv):
                 new_rs_capacity['vcpu_reserved'] = int(reserved_rs['vcpu_reserved'])
                 # print "new_rs_capacity da nhay vao trong checked owr vcpu capacity"
                 print new_rs_capacity
-                mydb.update_row_capacity_by_uuid(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
+                mydb.replace_row_by_uuid_composite(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
                 retrval = True
 
             elif table_name == 'vmem_capacity' and retrval:
                 new_rs_capacity['vmem_available'] = int(current_rs_capacity['vmem_available']) - int(reserved_rs['vmem_reserved'])
                 new_rs_capacity['vmem_reserved'] = int(reserved_rs['vmem_reserved'])
 
-                mydb.update_row_capacity_by_uuid(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
+                mydb.replace_row_by_uuid_composite(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
                 retrval = True
 
             elif table_name == 'vdisk_capacity' and retrval:
                 new_rs_capacity['disk_available'] = int(current_rs_capacity['disk_available']) - int(reserved_rs['disk_reserved'])
                 new_rs_capacity['disk_reserved'] = int(reserved_rs['disk_reserved'])
-                mydb.update_row_capacity_by_uuid(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
+                mydb.replace_row_by_uuid_composite(table_name=table_name, uuid=uuid, new_values_dict=new_rs_capacity)
                 retrval = True
     return retrval
 
@@ -105,7 +101,7 @@ def calculate_reserved_compute_rs_by_flavor(rsv):
 def get_current_available_resource(mydb, table_name):
     #print table_name
     #rdb_ = resource_db()
-    rows_count, rows = mydb.get_table_capacity(table_name)
+    rows_count, rows = mydb.get_all_rows_for_table_composite(table_name)
 
     if rows_count == 0:
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
@@ -188,7 +184,7 @@ if __name__ == '__main__':
 #         init_data = vmem_op_stats()
 #     # if capacity resource table is empty, then call add_row_rs() for initializing first capacity resource values
 #     rdb_ = resource_db()
-#     result = rdb_.update_row_capacity_by_uuid(table_name=table_name)
+#     result = rdb_.replace_row_by_uuid_composite(table_name=table_name)
 #
 #     if result > 0:
 #         return result

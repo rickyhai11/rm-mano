@@ -2,18 +2,121 @@
 author: rickyhai
 dcnlab
 nguyendinhhai11@gmail.com
-Implemetation capacity management of users in a given tenant.
+Implemetation capacity management
 '''
 
-import sh_rm_monitoring as rm_monitor
-from sh_rm_monitoring import get_nova_client
-from sh_rm_monitoring import get_user_compute_quota
-from sh_rm_monitoring import get_user_network_quota
-from sh_rm_monitoring import get_user_storage_quota
-from sh_rm_monitoring import init_users_compute_util_2_db
-import todo
-
 import datetime
+
+from sh_layer.rm_monitor.sh_rm_monitoring import *
+from sh_layer.rm_db.utils_db import utils_db
+from utils import todo
+from sh_layer.global_info import *
+
+
+def resource_limit_check_for_tenant(resource, tenant_id):
+    return
+
+def quota_reserve(context, resources, quotas, deltas, expire,
+                  until_refresh, max_age, project_id=None):
+    return
+
+def quota_usage_get(context, project_id, resource):
+    # TODO (rm api interface)
+    return _get_quota_usages_by_resource(context, project_id, resource)
+
+def _get_quota_usages_by_resource(context, project_id, resource):
+    # TODO(rickyhai), add user_id as part of the filter
+    return
+
+
+def quota_usage_get_all_by_project(context, project_id):
+    # TODO (rm api interface)
+    return
+
+def _quota_usage_create(tenant_id, user_id):
+    return
+
+def __update_quota_usage_for_tenant(tenant_id, user_id):
+    return
+
+def quota_destroy_all_by_project(context, project_id, only_quotas=False):
+    # TODO (rm api interface)
+    # TODO (rickyhai) admin context require
+    """Destroy all quotas associated with a project.
+
+    This includes limit quotas, usage quotas and reservation quotas.
+    Optionally can only remove limit quotas and leave other types as they are.
+
+    :param context: The request context, for access checks.
+    :param project_id: The ID of the project being deleted.
+    :param only_quotas: Only delete limit quotas, leave other types intact.
+    """
+def quota_destroy_by_project(*args, **kwargs):
+    # TODO (rm api interface)
+    """Destroy all limit quotas associated with a project.
+
+    Leaves usage and reservation quotas intact.
+    """
+    quota_destroy_all_by_project(only_quotas=True, *args, **kwargs)
+
+
+def quota_resource_usage_sync_for_tenant(nfvodb, tenant_id):
+    all_usage = get_resource_usage_tenant(tenant_id)
+    nlog.debug(all_usage)
+    for resource_usage in QUOTA_FIELDS:
+        result, uuid = nfvodb.new_row(table='resource_usage_rm', INSERT=all_usage[resource_usage], add_uuid=True, log=False)
+        if result <= 0:
+            nlog.error("ERROR: added/updated resource usage from VIM to DB ")
+    return result, uuid
+
+
+
+
+
+
+
+
+
+
+
+
+
+# store  actual resource usage to DB
+########################################################
+
+def add_resource_2_db(mydb, table, data):
+    result = mydb.add_row_rs(table, data)
+    if result > 0:
+        print "Added data to %s table successfully"
+    return result
+
+def __init_resource_usage_compute_all_users_2_db(mydb, table, rsv):
+    # polling compute openstack service for getting updated compute resource usage.
+    # when compute resource value of user is not initiated (empty with that user_id and tenant_id in DB)
+    # Above specification is to identify exactly which user from particular tenant, compute resources would be initiated into DB table
+    data_list = get_resource_usage_compute_for_all_users_in_all_tenants()
+    for data in data_list:
+        if data['user_id'] == rsv['user_id'] and data['tenant_id'] == rsv['tenant_id'] and data['user_name'] != 'admin': # need to exclude admin user as admin-ids are same in all tenants
+            print " initating resource usage-compute for user-id: %s and tenant-id: %s in %s DB table" % (data['user_id'], data['tenant_id'], table)
+            result, added_uuid = mydb.add_row_rs(table, data)
+            print type(data)
+            return data, result, added_uuid # at the first meet matched user-id, loop will be broken. save memory than put return out of loop
+
+def init_resource_usage_compute_all_users_2_db(mydb, table, rsv):
+    init_data, result, added_uuid = __init_resource_usage_compute_all_users_2_db(mydb, table, rsv)
+    print type(init_data)
+    if result > 0 and init_data is not None:
+        print "Initiated dat for %s table successfully"
+        return init_data, result, added_uuid
+    elif result == 0 and init_data is None: # if we see this error TypeError: 'NoneType' object is not iterable, that means code jumps to here
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        print " FAILED to initiate data into DB table %s because user-id=%s and tenant-id=%s from RESERVATION request CAN NOT be found in DB table %s " \
+              "--> init_data is empty" % (table,rsv['user_id'], rsv['tenant_id'], table)
+        print "==========================================================================================================================="
+        print "WARNING !!! user-id: %s and tenant-id: %s from RESERVATION request are NOT EXISTING in DB and VIM OR user-id: %s is admin user." \
+              " Please sign up !!! Thanks." % (rsv['user_id'], rsv['tenant_id'], rsv['user_id'])
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        return result
 
 
 def check_user_compute_capacity(mydb, rsv):
@@ -62,7 +165,7 @@ def check_user_compute_capacity(mydb, rsv):
                 new_rs_capacity['created_at'] = datetime.datetime.now()
                 print new_rs_capacity
                 # mydb.add_row_rs(table_name=table, row_dict=new_rs_capacity)
-                mydb.update_row_capacity_by_uuid(table_name=table, uuid=new_rs_capacity['uuid'], new_values_dict=new_rs_capacity)
+                mydb.replace_row_by_uuid_composite(table_name=table, uuid=new_rs_capacity['uuid'], new_values_dict=new_rs_capacity)
     return retrval
 
 def calculate_reserved_compute_rs_by_flavor(rsv):
@@ -140,7 +243,7 @@ def get_current_available_resource(mydb, table_name, rsv):
         print "%s table is empty. Initializing available resource values by querying the various Controllers (e.g. Nova, Neutron, Cinder)...." % table_name
         print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
         if table_name == 'users_util_compute_rm':
-            init_data_current_user, result, added_uuid = init_users_compute_util_2_db(mydb=mydb, table=table_name, rsv=rsv)
+            init_data_current_user, result, added_uuid = init_resource_usage_compute_all_users_2_db(mydb=mydb, table=table_name, rsv=rsv)
             return init_data_current_user, added_uuid
 
         elif table_name == 'users_util_network_rm':
@@ -159,3 +262,19 @@ def get_current_available_resource(mydb, table_name, rsv):
         print "Calculated resource usage --> Updating to DB..."
         print row
         return current_capacity_data[0], (current_capacity_data[0])['uuid']
+
+
+def go_main():
+    return 0
+
+if __name__ == "__main__":
+
+    try:
+        nfvodb = utils_db()
+        if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+            print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
+            exit(-1)
+        r, u = quota_resource_usage_sync_for_tenant(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5')
+
+    except (KeyboardInterrupt, SystemExit):
+        print 'Exiting Resource Management'

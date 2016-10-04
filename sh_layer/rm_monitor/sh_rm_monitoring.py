@@ -10,13 +10,15 @@ import sys
 
 import cinderclient.v1.client as cinderclient
 import keystoneclient.v2_0.client as keystoneclient
+import six
 import swiftclient.client as swiftclient
 from keystoneauth1 import session
 from keystoneauth1.identity import v2
 from neutronclient.neutron import client as neutronclient
 from novaclient import client as novaclient
 
-import resource_db
+from sh_layer.rm_db import resource_db
+from sh_layer.common.consts import *
 
 # Print unicode text to the terminal
 reload(sys)
@@ -34,10 +36,10 @@ global_config = {'db_host': '116.89.184.43',
 
 os_username = 'admin'
 os_password = 'fncp2015'
-os_auth_url = "http://129.254.39.209:5000/v2.0/"
+os_auth_url = "http://116.89.184.94:5000/v2.0/"
 _debug = False
 # new para
-os_url = 'http://129.254.39.209:35357/v2.0'
+os_url = 'http://116.89.184.94:35357/v2.0'
 
 
 #Static flavors list
@@ -136,18 +138,18 @@ def get_nova_creds():
 #     d['auth_url']   = os.environ['OS_AUTH_URL']
 #     pass
 
-def get_nova_client(p_tenant_name):
-    return novaclient.Client("2", os_username, os_password, p_tenant_name, os_auth_url, service_type='compute')
+def get_nova_client(p_tenant_id):
+    return novaclient.Client(version=2, username= os_username, api_key=os_password, tenant_id=p_tenant_id, auth_url=os_auth_url, service_type='compute')
 
-def get_neutron_client(p_tenant_name):
-    # vimco = vimconn_openstack.vimconnector(uuid="", name="", tenant=p_tenant_name, url="http://223.194.33.59:5000/v2.0",
+def get_neutron_client(p_tenant_id):
+    # vimco = vimconn_openstack.vimconnector(uuid="", name="", tenant=p_tenant_id, url="http://223.194.33.59:5000/v2.0",
     #                                               url_admin="", user="admin", passwd="stack")
-    # neutron = vimco._reload_connection_tenant(project_iid=p_tenant_name)
+    # neutron = vimco._reload_connection_tenant(project_iid=p_tenant_id)
 
-    return neutronclient.Client('2.0', auth_url=os_auth_url, token=get_keystone_client().auth_token, username=os_username, tenant_name=p_tenant_name, password=os_password, public_network='public')
+    return neutronclient.Client('2.0', auth_url=os_auth_url, token=get_keystone_client().auth_token, username=os_username, tenant_id=p_tenant_id, password=os_password, public_network='public')
 
-def get_cinder_client(p_tenant_name):
-    return cinderclient.Client(os_username, os_password, p_tenant_name, os_auth_url)
+def get_cinder_client(p_tenant_id):
+    return cinderclient.Client(username=os_username, api_key=os_password, tenant_id=p_tenant_id, auth_url=os_auth_url)
 
 def get_keystone_client():
     creds = get_keystone_creds()
@@ -157,10 +159,10 @@ def get_keystone_client():
 # get keystone function which is used in get_users_per_tenant_details() function to call
 # "tenants.list_users(tenant.id)"
 #
-def get_keystone(p_tenant_name):
+def get_keystone(p_tenant_id):
     """Returns a Keystone.Client instance."""
     auth = v2.Password(username=os_username, password=os_password,
-                  tenant_name=p_tenant_name, auth_url=os_auth_url)
+                  tenant_id=p_tenant_id, auth_url=os_auth_url)
     sess = session.Session(auth=auth)
     keystone = keystoneclient.Client(session=sess)
     # print keystone.tenants.list_users('a2f35a11a77e4286af46c8c0b3fcd2d3')
@@ -185,8 +187,8 @@ def get_keystone(p_tenant_name):
 #     return keystone
 
 
-def get_swift_client(p_tenant_name):
-    return swiftclient.Connection(authurl=os_auth_url, user=os_username, key=os_password, tenant_name=p_tenant_name, auth_version='2')
+def get_swift_client(p_tenant_id):
+    return swiftclient.Connection(authurl=os_auth_url, user=os_username, key=os_password, tenant_id=p_tenant_id, auth_version='2')
 
 
 # --
@@ -215,10 +217,10 @@ def get_flavor_count(p_nova_client):
     return cnt_inst_flavor_distribution
 
 # --
-# get_instance_details()
+# get_vnfs_details()
 # Returns vpcu, vmem, disk, floatingIP for a given tenant
 #
-def get_instance_details(p_nova_client):
+def get_vnfs_details(p_nova_client):
     instanceList    = p_nova_client.servers.list()
     floatIpList     = p_nova_client.floating_ips.list()
 
@@ -260,18 +262,17 @@ def get_instance_details(p_nova_client):
             cnt_floatip_disassociated = cnt_floatip_disassociated + 1
 
     summary = {}
-    summary['total_instances'] = cnt_instances
-    summary['total_instances_active'] = cnt_instances_active
-    summary['total_vcpu']   = cnt_vcpu
-    summary['total_vcpu_active'] = cnt_vcpu_active
+    summary['vnf_in_use'] = cnt_instances
+    summary['vnf_active'] = cnt_instances_active
+    summary['vcpu_in_use']   = cnt_vcpu
+    summary['vcpu_active'] = cnt_vcpu_active
 
-    summary['total_ram']    = cnt_ram
-    summary['total_ram_active'] = cnt_ram_active
-
-    summary['total_disk']   = cnt_disk
-    summary['total_ephemeral'] = cnt_ephemeral
-    summary['total_floatingip_allocated'] = cnt_floatip
-    summary['total_floatingip_disassocated'] = cnt_floatip_disassociated
+    summary['ram_in_use']    = cnt_ram
+    summary['ram_active'] = cnt_ram_active
+    summary['disk_in_use']   = cnt_disk + cnt_ephemeral
+    # summary['total_ephemeral'] = cnt_ephemeral # TODO (rickyhai) will to seperate later when needed
+    summary['floatingip_in_use'] = cnt_floatip # allocated already
+    summary['floatingip_disassocate'] = cnt_floatip_disassociated
 
     return summary
 
@@ -371,8 +372,8 @@ def get_networks_details(p_neutron_client):
     # get number of Floating IP : used, total and available in a tenant
     t_floatingips_total = _estimate_total_ip(p_neutron_client)
     # t_floatingips_total = int(t_floatingips_data)
-    t_floatingips_usage = len(p_neutron_client.list_floatingips(**kwargs)['floatingips'])
-    t_floatingips_available = t_floatingips_total - t_floatingips_usage
+    t_floatingips_used = len(p_neutron_client.list_floatingips(**kwargs)['floatingips'])
+    t_floatingips_available = t_floatingips_total - t_floatingips_used
 
     t_lbaas_vips_total = 0
     t_lbaas_pools_total = 0
@@ -418,36 +419,36 @@ def get_networks_details(p_neutron_client):
                                                'ip_version', 'cidr', 'dns_nameservers']}
     t_subnets_attributes = p_neutron_client.list_subnets(**kwargs_subnets)['subnets']
 
-    summary['total_networks']                = t_networks_total
-    summary['total_networks_active']         = t_networks_active
-    summary['total_networks_inactive']       = t_networks_inactive
-    summary['total_networks_attributes']     = t_networks_attributes
+    summary['networks_in_use']                = t_networks_total # in_use = active + inactive
+    summary['networks_active']         = t_networks_active
+    summary['networks_inactive']       = t_networks_inactive
+    summary['networks_attributes']     = t_networks_attributes
 
-    summary['total_ports']                   = t_ports_total
-    summary['total_ports_active']            = t_ports_active
-    summary['total_ports_inactive']          = t_ports_inactive
-    summary['total_ports_attributes']        = t_ports_attributes
+    summary['ports_in_use']                   = t_ports_total
+    summary['ports_active']            = t_ports_active
+    summary['ports_inactive']          = t_ports_inactive
+    summary['ports_attributes']        = t_ports_attributes
 
-    summary['total_floatingips']             = t_floatingips_total
-    summary['total_floatingips_usage']       = t_floatingips_usage
-    summary['total_floatingips_available']   = t_floatingips_available
-    summary['total_floatingip_active']       = t_floatingips_active
-    summary['total_floatingip_inactive']     = t_floatingips_inactive
-    summary['total_floatingip_attributes']   = t_floatingips_attributes
+    summary['floatingips_total']         = t_floatingips_total
+    summary['floatingips_in_use']       = t_floatingips_used
+    summary['floatingips_available']   = t_floatingips_available
+    summary['floatingip_active']       = t_floatingips_active
+    summary['floatingip_inactive']     = t_floatingips_inactive
+    summary['floatingip_attributes']   = t_floatingips_attributes
 
-    summary['total_routers']                 = t_routers_total
-    summary['total_routers_active']          = t_routers_active
+    summary['routers_in_use']                 = t_routers_total
+    summary['total_routers_active']          = t_routers_active # active router
     summary['total_routers_inactive']        = t_routers_inactive
     summary['total_routers_attributes']      = t_routers_attributes
 
-    summary['total_subnets']                 = t_subnets_total
+    summary['subnets_in_use']                 = t_subnets_total
     # summary['total_subnets_active']          = t_subnets_active
     # summary['total_subnets_inactive']        = t_subnets_inactive
-    summary['total_subnets_attributes']      = t_subnets_attributes
+    summary['subnets_attributes']      = t_subnets_attributes
 
-    summary['total_snat_external_gateway']   = t_snat_external_gateway
-    summary['total_lbaas_vips']              = t_lbaas_vips_total
-    summary['total_lbaas_pools']             = t_lbaas_pools_total
+    summary['snat_external_gateway']   = t_snat_external_gateway
+    summary['lbaas_vips']              = t_lbaas_vips_total
+    summary['lbaas_pools']             = t_lbaas_pools_total
 
     return summary
 
@@ -499,14 +500,15 @@ def get_volume_details(p_cinder_client):
         total_provisioned = total_provisioned + volumes.size  # (volumes.size * 1024 * 1024 * 1024)
 
     for snapshot in snapshotlist:
-        total_volume_snapshots_provisioned = total_volume_snapshots_cnt + snapshot.size # (snapshot.size * 1024 * 1024 * 1024)
+        total_volume_snapshots_provisioned = total_volume_snapshots_cnt + snapshot.size
+        # (snapshot.size * 1024 * 1024 * 1024)
 
 
     summary = {}
-    summary['total_vols_count'] = len(volumelist)
-    summary['total_vols_provisioned_capacity'] = total_provisioned
-    summary['total_snapshots_count'] = len(snapshotlist)
-    summary['total_snapshots_provisioned_capacity'] = total_volume_snapshots_provisioned
+    summary['vols_count'] = len(volumelist)
+    summary['vols_size_in_use'] = total_provisioned
+    summary['snapshots_count'] = len(snapshotlist)
+    summary['snapshots_size_in_use'] = total_volume_snapshots_provisioned
     return summary
 
 
@@ -525,7 +527,7 @@ def get_volume_details(p_cinder_client):
 
 
 # --
-# get_all_tenant_flavorcount()
+# get_flavor_usage_all_tenants()
 # Returns dict of dict for all tenants
 # This is of the form
 #    d['Tenant_Name'] = {
@@ -540,7 +542,7 @@ def get_volume_details(p_cinder_client):
 #        "custom"        : int
 #    }
 #
-def get_all_tenant_flavorcount():
+def get_flavor_usage_all_tenants():
     keystone = get_keystone_client()
     tenantlist = keystone.tenants.list()
 
@@ -598,14 +600,18 @@ def get_all_tenant_flavorcount():
 
     return d
 
-
 # --
-# get_all_tenant_utilization()
+# get_resource_usage_all_tenants()
 # Returns a (k,v) dict where k = tenantname and v is dict of pulled values
 #
-def get_all_tenant_utilization():
+
+# --
+# get_resource_usage_all_tenants()
+# Returns a (k,v) dict where k = tenantname and v is dict of pulled values
+#
+def get_resource_usage_all_tenants():
     keystone = get_keystone_client()
-    tenantlist = keystone.tenants.list()
+    tenant_list = keystone.tenants.list()
 
     global _debug
     if _debug == True:
@@ -657,7 +663,7 @@ def get_all_tenant_utilization():
     # Will be returning an aggregate at the end .. so lets use OrderedDict()
     d = collections.OrderedDict()
 
-    for tenant in tenantlist:
+    for tenant in tenant_list:
 
         # Skip disabled tenants
         if tenant.enabled == False:
@@ -721,7 +727,7 @@ def get_all_tenant_utilization():
             swift = get_swift_client(tenant.name)
             neutron = get_neutron_client(tenant.name)
 
-            compute_summary = get_instance_details(nova)
+            compute_summary = get_vnfs_details(nova)
             storage_summary = get_volume_details(cinder)
             # object_summary  = get_object_details(swift)
             neutron_summary = get_networks_details(neutron)
@@ -783,8 +789,8 @@ def get_all_tenant_utilization():
             aggr_floatip_alloc          = aggr_floatip_alloc + t_float_allocated
             aggr_floatip_disassoc       = aggr_floatip_disassoc + t_float_disassociated
             aggr_persist_vol_count       = aggr_persist_vol_count + t_persist_volcount
-            aggr_persist_provisioned_vol_value    = aggr_persist_provisioned_vol_value + t_persist_provisioned_vol_value
-            aggr_persist_snapshot_count    = aggr_persist_snapshot_count + t_persist_snapshot_count
+            aggr_persist_provisioned_vol_value         = aggr_persist_provisioned_vol_value + t_persist_provisioned_vol_value
+            aggr_persist_snapshot_count                = aggr_persist_snapshot_count + t_persist_snapshot_count
             aggr_persist_provisoned_snapshots_value    = aggr_persist_provisoned_snapshots_value + t_persist_provisioned_snapshot_value
             # aggr_object_count           = aggr_object_count + t_object_count
             # aggr_object_storage_used    = aggr_object_storage_used + t_object_storage_used
@@ -813,10 +819,8 @@ def get_all_tenant_utilization():
             aggr_lbaas_vips_prov            = aggr_lbaas_vips_prov + t_lbaas_vips_total
             aggr_lbaas_pools_prov           = aggr_lbaas_pools_prov + t_lbaas_pools_total
 
-
-
-
-        # Inst_Prov,Inst_Active,VCPU_Prov,VCPU_Active,RAM_Prov,RAM_Active,Disk_Prov_GB,FloatIP_Alloc,FloatIP_Disassoc,Vols_Prov,Vols_Prov_GB,Object_Containers,Object_Count,Object_Storage_Used_GB"
+        # Inst_Prov,Inst_Active,VCPU_Prov,VCPU_Active,RAM_Prov,RAM_Active,Disk_Prov_GB,FloatIP_Alloc,FloatIP_Disassoc,
+        # Vols_Prov,Vols_Prov_GB,Object_Containers,Object_Count,Object_Storage_Used_GB"
         # k,v where k becomes header
         d[t_tenant_name] = {
             'Users_count'           : t_users_cnt,
@@ -863,96 +867,6 @@ def get_all_tenant_utilization():
 
         }
 
-        if _debug == True:
-            print " [-] %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
-            %s, %s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s, %s, %s, \
-                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s" % (
-                    t_users_cnt,
-                    t_users_list,
-                    t_tenant_name,
-                    t_instances,
-                    t_instances_active,
-                    t_vcpu,
-                    t_vcpu_active,
-                    t_ram,
-                    t_ram_active,
-                    t_disk_ephemeral,
-                    t_float_allocated,
-                    t_float_disassociated,
-                    t_persist_volcount,
-                    t_persist_provisioned_vol_value,
-                    t_persist_snapshot_count,
-                    t_persist_provisioned_snapshot_value,
-                    # t_container_count,
-                    # t_object_count,
-                    # t_object_storage_used,
-                    t_networks_total,
-                    t_networks_active,
-                    t_networks_inactive,
-                    t_networks_attributes,
-                    t_ports_total,
-                    t_ports_active,
-                    t_ports_inactive,
-                    t_ports_attributes,
-                    t_floatingips_total,
-                    t_floatingips_usage,
-                    t_floatingips_available,
-                    t_floatingips_active,
-                    t_floatingips_inactive,
-                    t_floatingips_attributes,
-                    t_routers_total,
-                    t_routers_active,
-                    t_routers_inactive,
-                    t_routers_attributes,
-                    t_subnets_total,
-                    t_subnets_attributes,
-                    t_snat_external_gateway,
-                    t_lbaas_vips_total,
-                    t_lbaas_pools_total
-            )
-
-    # Print Aggregates
-    if _debug == True:
-        print " [-] Total,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s," \
-              "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s, %s" % (
-                aggr_users_cnt,
-                aggr_inst_prov,
-                aggr_inst_active,
-                aggr_vcpu_prov,
-                aggr_vcpu_active,
-                aggr_ram_prov,
-                aggr_ram_active,
-                aggr_disk_prov,
-                aggr_floatip_alloc,
-                aggr_floatip_disassoc,
-                aggr_persist_vol_count,
-                aggr_persist_provisioned_vol_value,
-                aggr_persist_snapshot_count,
-                aggr_persist_provisoned_snapshots_value,
-                # aggr_container_count,
-                # aggr_object_count,
-                # aggr_object_storage_used,
-                aggr_networks_prov,
-                aggr_networks_active,
-                aggr_networks_inactive,
-                aggr_ports_prov,
-                aggr_ports_active,
-                aggr_ports_inactive,
-                aggr_floatingips_prov,
-                aggr_floatingips_allocated,
-                aggr_floatingips_available,
-                aggr_floatingips_active,
-                aggr_floatingips_inactive,
-                aggr_floatingips_inactive,
-                aggr_routers_prov,
-                aggr_routers_active,
-                aggr_routers_inactive,
-                aggr_subnets_prov,
-                aggr_snat_external_gateway_prov,
-                aggr_lbaas_vips_prov,
-                aggr_lbaas_pools_prov
-        )
-
     # Adding aggregates at the end of ordered dict
     d['_Total'] = {
             'Users_count'       : aggr_users_cnt,
@@ -994,10 +908,143 @@ def get_all_tenant_utilization():
 
     return d
 
+
+def build_used_limits(quotas):
+
+    quota_map = {
+        'totalRAMUsed': 'ram',
+        'totalCoresUsed': 'cores',
+        'totalInstancesUsed': 'instances',
+        'totalFloatingIpsUsed': 'floating_ips',
+        'totalSecurityGroupsUsed': 'security_groups',
+        'totalServerGroupsUsed': 'server_groups',
+    }
+
+    # need to refresh usage from the bottom pods? Now from the data in top
+    used_limits = {}
+    for display_name, key in six.iteritems(quota_map):
+        if key in quotas:
+            reserved = quotas[key]['reserved']
+            used_limits[display_name] = quotas[key]['in_use'] + reserved
+
+    return used_limits
+
+# get actual resource usage from VIM with proper DB format
+def _get_resource_usage_tenant(tenant_id):
+
+    resource_usage = collections.defaultdict(dict)
+
+    # get keystone client from get_keystone(p_tenant_name) function which have 'power'
+    # to fully access keystone functions in lib
+    # t_keystone = get_keystone(tenant_id)
+    # t_users_cnt = len(t_keystone.tenants.list_users(tenant_id))
+    # t_users_list = t_keystone.tenants.list_users(tenant_id)
+
+    nova = get_nova_client(tenant_id)
+    cinder = get_cinder_client(tenant_id)
+    # swift = get_swift_client(tenant_id)
+    neutron = get_neutron_client(tenant_id)
+
+    compute_summary = get_vnfs_details(nova)
+    storage_summary = get_volume_details(cinder)
+    # object_summary  = get_object_details(swift)
+    neutron_summary = get_networks_details(neutron)
+
+    # resource_usage['nova'] = compute_summary
+    # resource_usage['cinder'] = storage_summary
+    # resource_usage['neutron'] = neutron_summary
+
+    resource_usage = collections.defaultdict(dict)
+    # init resource usage to store in DB (sync VIM <-> rm DB)
+    for resource in NOVA_QUOTA_FIELDS:
+        resource_usage[resource] = collections.defaultdict(dict)
+        if resource == 'vcpus':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = compute_summary['vnf_in_use']
+            resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
+        if resource == 'vnfs':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = compute_summary['vcpu_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'memory':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = compute_summary['ram_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'floatingip_default':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = compute_summary['floatingip_in_use']
+            resource_usage[resource]['reserved'] = 0
+
+    for resource in CINDER_QUOTA_FIELDS:
+        resource_usage[resource] = collections.defaultdict(dict)
+        if resource == 'volumes':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = storage_summary['vols_size_in_use']
+            resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
+        if resource == 'snapshots':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = storage_summary['snapshots_size_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'gigabytes':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = compute_summary['disk_in_use'] # pickup from compute resources (get_vnfs_detail() function)
+            resource_usage[resource]['reserved'] = 0
+
+    for resource in NEUTRON_QUOTA_FIELDS:
+        resource_usage[resource] = collections.defaultdict(dict)
+        if resource == 'network':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = neutron_summary['networks_in_use']
+            resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
+        if resource == 'subnet':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = neutron_summary['subnets_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'port':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = neutron_summary['ports_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'router':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = neutron_summary['routers_in_use']
+            resource_usage[resource]['reserved'] = 0
+        if resource == 'floatingip':
+            resource_usage[resource]['project_id'] = tenant_id
+            resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
+            resource_usage[resource]['resource'] = resource
+            resource_usage[resource]['in_use'] = neutron_summary['floatingips_in_use']
+            resource_usage[resource]['reserved'] = 0
+    return resource_usage
+
+def get_resource_usage_tenant(tenant_id):
+    return _get_resource_usage_tenant(tenant_id)
+
 # --
 # Get absolute limits details for a tenant
 #
-def get_tenant_quotas_limits():
+def get_hard_limits_all_tenants():
     keystone = get_keystone_client()
     tenantlist = keystone.tenants.list()
 
@@ -1050,6 +1097,13 @@ def get_tenant_quotas_limits():
                     limit.value = limit.value #* 1024.0 * 1024.0
                 q[t_tenant_name]['limits_compute'][limit.name] = limit.value
             # print "Limits of compute resources for all tenants are : %s" % (q[t_tenant_name]['limits_compute'])
+            limits = nova.limits.get(tenant_id='f4211c8eee044bfb9dea2050fef2ace5').to_dict()
+            resource_usage = collections.defaultdict(dict)
+            resource_usage['ram'] = limits['absolute']['totalRAMUsed']
+            resource_usage['cores'] = limits['absolute']['totalCoresUsed']
+            resource_usage['instances'] = \
+                limits['absolute']['totalInstancesUsed']
+            print resource_usage
 
             # Nova Quotas for tenant
 
@@ -1120,12 +1174,12 @@ def get_tenant_quotas_limits():
 # convert quota compute to DB format for storing (json format) - for tenant quota-compute table
 #
 
-def get_dbformat_compute_tenant_quotas_from_op():
+def get_dbformat_hard_limit_compute_all_tenants():
     keystone = get_keystone_client()
     tenantlist = keystone.tenants.list()
 
     quotas_compute_list = []
-    data = get_tenant_quotas_limits()
+    data = get_hard_limits_all_tenants()
 
     for tenant in tenantlist:
         quotas_compute                             = data[tenant.name]['quotas_compute']
@@ -1147,16 +1201,16 @@ def get_dbformat_compute_tenant_quotas_from_op():
 # --
 # convert limits compute to DB format for storing (json format)
 #
-def get_dbformat_compute_tenant_limits_from_op():
+def get_dbformat_resource_usage_compute_all_tenants():
     keystone = get_keystone_client()
     tenantlist = keystone.tenants.list()
 
     # Initiate list of usage compute records that will be stored into DB
     limits_compute_list = []
 
-    data = get_tenant_quotas_limits()
+    data = get_hard_limits_all_tenants()
     #  resource utilization metrics for all tenants
-    data_tenant_utilization = get_all_tenant_utilization()
+    data_tenant_utilization = get_resource_usage_all_tenants()
 
     for tenant in tenantlist:
         # dict contains upper letters
@@ -1198,18 +1252,18 @@ def get_dbformat_compute_tenant_limits_from_op():
         # total resources utilization for all used and reserved resources in a given tenant
         limits_compute['percentage_vmem_total_util_by_users']            = 0
 
-        # add two new meters for instances (vapps)
-        limits_compute['max_total_instances']                  = limits_compute.pop('maxtotalinstances')
-        limits_compute['total_instances_allocated']            = 0
-        limits_compute['total_instances_used']                 = limits_compute.pop('totalinstancesused')
-        limits_compute['total_instances_available']            = limits_compute['max_total_instances'] - limits_compute['total_instances_allocated']
-        limits_compute['total_instances_reserved']             = 0
-        limits_compute['total_instances_active']               = tenant_compute_util['Inst_Active']
+        # add two new meters for vnfs (vapps)
+        limits_compute['max_total_vnfs']                  = limits_compute.pop('maxtotalinstances')
+        limits_compute['total_vnfs_allocated']            = 0
+        limits_compute['total_vnfs_used']                 = limits_compute.pop('totalinstancesused')
+        limits_compute['total_vnfs_available']            = limits_compute['max_total_instances'] - limits_compute['total_instances_allocated']
+        limits_compute['total_vnfs_reserved']             = 0
+        limits_compute['total_vnfs_active']               = tenant_compute_util['Inst_Active']
         # Resources Utilization monitoring - unit %
-        limits_compute['percentage_instances_used_by_users']              = 0
-        limits_compute['percentage_instances_reserved_by_users']          = 0
+        limits_compute['percentage_vnfs_used_by_users']              = 0
+        limits_compute['percentage_vnfs_reserved_by_users']          = 0
         # total resources utilization for all used and reserved resources in a given tenant
-        limits_compute['percentage_instances_total_util_by_users']        = 0
+        limits_compute['percentage_vnfs_total_util_by_users']        = 0
 
         # add two new meters for instances (vapps)
         limits_compute['max_total_floatingips']                = limits_compute.pop('maxtotalfloatingips')
@@ -1234,16 +1288,16 @@ def get_dbformat_compute_tenant_limits_from_op():
 # convert quota networks (neutron) to DB format for storing (json format)
 #
 
-def get_dbformat_networks_tenant_quotas_from_op():
+def get_dbformat_resource_usage_networks_all_tenants():
     keystone = get_keystone_client()
     tenantlist = keystone.tenants.list()
 
     # Initiate list of usage networks records that will be stored into DB
     quotas_networks_list = []
     # Quotas and limits for all tenants - compute + networks + storage resources
-    data_quotas_limits = get_tenant_quotas_limits()
+    data_quotas_limits = get_hard_limits_all_tenants()
     # Tenant utilization metrics for all tenants
-    data_tenant_utilization = get_all_tenant_utilization()
+    data_tenant_utilization = get_resource_usage_all_tenants()
 
     for tenant in tenantlist:
         quotas_network_utilization = data_quotas_limits[tenant.name]['quotas_networks']
@@ -1309,9 +1363,9 @@ def get_dbformat_networks_tenant_quotas_from_op():
 # --
 # combine tenant limits and tenant utilization  that related to storage resource to store into DB with proper format
 #
-def get_dbformat_storage_tenant_limits_from_op():
+def get_dbformat_resource_usage_storage_all_tenants():
     '''
-    Out put data - quota and limit storage format from get_tenant_quotas_limits() function
+    Out put data - quota and limit storage format from get_hard_limits_all_tenants() function
     	'quotas_cinder':
 		{'per_volume_gigabytes': {u'limit': -1, u'reserved': 0, u'in_use': 0}, 'snapshots_lvmdriver-1': {u'limit': -1, u'reserved': 0, u'in_use': 0},
 		'gigabytes': {u'limit': 1000, u'reserved': 0, u'in_use': 0}, 'tenant_id': u'24104f8dd8074d5aae884f25a583e3d4',
@@ -1334,10 +1388,10 @@ def get_dbformat_storage_tenant_limits_from_op():
     tenant_storage_util = {}
 
     # get quota and limit quota data
-    data = get_tenant_quotas_limits()
+    data = get_hard_limits_all_tenants()
 
     #  resource utilization metrics for all tenants
-    data_tenant_utilization = get_all_tenant_utilization()
+    data_tenant_utilization = get_resource_usage_all_tenants()
 
     for tenant in tenantlist:
         # limits storage dict contains upper letters that need to be convert to lower letter when storing in DB if it is used
@@ -1349,22 +1403,23 @@ def get_dbformat_storage_tenant_limits_from_op():
 
         # data from tenant utilization function to get needed format with full fields to store in DB
         # (combine out put data from "tenant_quotas_storage_util" and "tenant_storage_util" for expected parameters)
-        tenant_data_util = data_tenant_utilization[tenant.name]
+        # tenant_data_util = data_tenant_utilization[tenant.name]
 
         # storage meters after combination
         tenant_storage_util['tenant_name']                              = tenant.name
         tenant_storage_util['tenant_id']                                = tenant.id
+
         tenant_storage_util['max_total_gigabytes']                      = tenant_quotas_storage_util['gigabytes']['limit']
         tenant_storage_util['total_gigabytes_allocated']                = 0 # total number of gigabytes are allocated to users in a given tenant
         tenant_storage_util['total_gigabytes_used']                     = tenant_quotas_storage_util['gigabytes']['in_use']
         tenant_storage_util['total_gigabytes_available']                = tenant_storage_util['max_total_gigabytes'] - tenant_storage_util['total_gigabytes_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
         tenant_storage_util['total_gigabytes_reserved']                 = 0  # need to recalculate
 
-        tenant_storage_util['max_total_gigabytes_lvmdriver-1']          = tenant_quotas_storage_util['gigabytes_lvmdriver-1']['limit']
-        tenant_storage_util['total_gigabytes_lvmdriver-1_allocated']    = 0 # total number of gigabytes are allocated to users in a given tenant
-        tenant_storage_util['total_gigabytes_lvmdriver-1_used']         = tenant_quotas_storage_util['gigabytes_lvmdriver-1']['in_use']
-        tenant_storage_util['total_gigabytes_lvmdriver-1_available']    = tenant_storage_util['max_total_gigabytes_lvmdriver-1'] - tenant_storage_util['total_gigabytes_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
-        tenant_storage_util['total_gigabytes_lvmdriver-1_reserved']     = 0  # need to recalculate
+        # tenant_storage_util['max_total_gigabytes_lvmdriver-1']          = tenant_quotas_storage_util['gigabytes_lvmdriver-1']['limit']
+        # tenant_storage_util['total_gigabytes_lvmdriver-1_allocated']    = 0 # total number of gigabytes are allocated to users in a given tenant
+        # tenant_storage_util['total_gigabytes_lvmdriver-1_used']         = tenant_quotas_storage_util['gigabytes_lvmdriver-1']['in_use']
+        # tenant_storage_util['total_gigabytes_lvmdriver-1_available']    = tenant_storage_util['max_total_gigabytes_lvmdriver-1'] - tenant_storage_util['total_gigabytes_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        # tenant_storage_util['total_gigabytes_lvmdriver-1_reserved']     = 0  # need to recalculate
 
         tenant_storage_util['max_total_backup_gigabytes']               = tenant_quotas_storage_util['backup_gigabytes']['limit']
         tenant_storage_util['total_backup_gigabytes_allocated']         = 0 # total number of gigabytes are allocated to users in a given tenant
@@ -1372,30 +1427,40 @@ def get_dbformat_storage_tenant_limits_from_op():
         tenant_storage_util['total_backup_gigabytes_available']         = tenant_storage_util['max_total_backup_gigabytes'] - tenant_storage_util['total_backup_gigabytes_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
         tenant_storage_util['total_backup_gigabytes_reserved']          = 0  # need to recalculate
 
-        tenant_storage_util['max_total_backup_cnt']                      = tenant_quotas_storage_util['backups']['limit']
-        tenant_storage_util['total_backup_cnt_allocated']                = 0 # total number of gigabytes are allocated to users in a given tenant
-        tenant_storage_util['total_backup_cnt_used']                     = tenant_quotas_storage_util['backups']['in_use']
-        tenant_storage_util['total_backup_cnt_available']                = tenant_storage_util['max_total_backup_cnt'] - tenant_storage_util['total_backup_cnt_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
-        tenant_storage_util['total_backup_cnt_reserved']                 = 0  # need to recalculate
+        tenant_storage_util['max_total_backup']                      = tenant_quotas_storage_util['backups']['limit']
+        tenant_storage_util['total_backup_allocated']                = 0 # total number of gigabytes are allocated to users in a given tenant
+        tenant_storage_util['total_backup_used']                     = tenant_quotas_storage_util['backups']['in_use']
+        tenant_storage_util['total_backup_available']                = tenant_storage_util['max_total_backup'] - tenant_storage_util['total_backup_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        tenant_storage_util['total_backup_reserved']                 = 0  # need to recalculate
 
-        tenant_storage_util['max_total_snapshots_cnt']                   = tenant_quotas_storage_util['snapshots']['limit']
-        tenant_storage_util['total_snapshots_cnt_allocated']             = 0 # total number of gigabytes are allocated to users in a given tenant
-        tenant_storage_util['total_snapshots_cnt_used']                  = tenant_data_util['Snapshot_Prov'] # get data from get_all_tenant_utilization() function: 'Snapshot_Prov': t_persist_snapshot_count,
-        tenant_storage_util['total_snapshots_cnt_available']             = tenant_storage_util['max_total_snapshots'] - tenant_storage_util['total_snapshots_cnt_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
-        tenant_storage_util['total_snapshots_cnt_reserved']              = 0  # need to recalculate
+        tenant_storage_util['max_total_snapshots']                   = tenant_quotas_storage_util['snapshots']['limit']
+        tenant_storage_util['total_snapshots_allocated']             = 0
+        tenant_storage_util['total_snapshots_used']                  = tenant_quotas_storage_util['snapshots']['in_use'] #tenant_data_util['Snapshot_Prov']
+        tenant_storage_util['total_snapshots_available']             = tenant_storage_util['max_total_snapshots'] - tenant_storage_util['total_snapshots_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        tenant_storage_util['total_snapshots_reserved']              = 0  # need to recalculate
 
-        tenant_storage_util['max_total_snapshots_lvmdriver-1']           = tenant_quotas_storage_util['snapshots_lvmdriver-1']['limit']
-        tenant_storage_util['total_snapshots_lvmdriver-1_allocated']     = 0 # total number of gigabytes are allocated to users in a given tenant
-        tenant_storage_util['total_snapshots_lvmdriver-1_used']          = tenant_quotas_storage_util['snapshots_lvmdriver-1']['in_use'] # get data from get_all_tenant_utilization() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
-        tenant_storage_util['total_snapshots_lvmdriver-1_available']     = tenant_storage_util['max_total_snapshots_lvmdriver-1'] - tenant_storage_util['total_snapshots_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
-        tenant_storage_util['total_snapshots_lvmdriver-1_reserved']      = 0  # need to recalculate
+        # tenant_storage_util['max_total_snapshots_lvmdriver-1']           = tenant_quotas_storage_util['snapshots_lvmdriver-1']['limit']
+        # tenant_storage_util['total_snapshots_lvmdriver-1_allocated']     = 0 # total number of gigabytes are allocated to users in a given tenant
+        # tenant_storage_util['total_snapshots_lvmdriver-1_used']          = tenant_quotas_storage_util['snapshots_lvmdriver-1']['in_use'] # get data from get_resource_usage_all_tenants() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
+        # tenant_storage_util['total_snapshots_lvmdriver-1_available']     = tenant_storage_util['max_total_snapshots_lvmdriver-1'] - tenant_storage_util['total_snapshots_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        # tenant_storage_util['total_snapshots_lvmdriver-1_reserved']      = 0  # need to recalculate
+
+
+        tenant_storage_util['max_total_volumes']           = tenant_quotas_storage_util['volumes']['limit']
+        tenant_storage_util['total_volumes_allocated']     = 0
+        tenant_storage_util['total_volumes_used']          = tenant_quotas_storage_util['volumes']['in_use']
+        tenant_storage_util['total_volumes_available']     = tenant_storage_util['max_total_volumes'] - tenant_storage_util['total_volumes_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        tenant_storage_util['total_volumes_reserved']      = 0  # need to recalculate
+
+        # tenant_storage_util['max_total_volumes_lvmdriver-1']           = tenant_quotas_storage_util['volumes_lvmdriver-1']['limit']
+        # tenant_storage_util['total_volumes_lvmdriver-1_allocated']     = 0
+        # tenant_storage_util['total_volumes_lvmdriver-1_used']          = tenant_quotas_storage_util['volumes_lvmdriver-1']['in_use'] # get data from get_resource_usage_all_tenants() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
+        # tenant_storage_util['total_volumes_lvmdriver-1_available']     = tenant_storage_util['max_total_volumes_lvmdriver-1'] - tenant_storage_util['total_volumes_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
+        # tenant_storage_util['total_volumes_lvmdriver-1_reserved']      = 0  # need to recalculate
+
         quotas_storage_list.append(tenant_storage_util)
         # print limits_compute_list
     return quotas_storage_list
-
-
-
-
 
 
 # --
@@ -1403,7 +1468,7 @@ def get_dbformat_storage_tenant_limits_from_op():
 # Returns number of users and list users for a given tenant, to get correctly keystone client for counting list users
 # need to call get_keystone(p_tenant_name) instead of get_keystone_client() as usual
 #
-def _get_users_per_tenant_details():
+def __get_list_users_per_tenant():
     """Retrieves list of user per tenant"""
     # get keystone client from get_keystone(p_tenant_name) function which have 'power'
     # to fully access keystone functions in lib
@@ -1420,7 +1485,7 @@ def _get_users_per_tenant_details():
     for tenant in tenantlist:
 
         # invoke another function to get new keystone client for getting users list per tenant
-        t_keystone = get_keystone(tenant.name)
+        t_keystone = get_keystone(tenant.id)
 
         # t_users_cnt = len(t_keystone.tenants.list_users(tenant.id))
         t_users_list = t_keystone.tenants.list_users(tenant.id)
@@ -1430,7 +1495,7 @@ def _get_users_per_tenant_details():
 
 def _convert_user_str_2_dict(data):
     '''
-    this function is to convert data format from _get_users_per_tenant_details function : string format to dictionary
+    this function is to convert data format from __get_list_users_per_tenant function : string format to dictionary
     format for each of user in a given tenant
     :param data: is string format including user info in a  given tenant
     :return: dict format of a user in a given tenant
@@ -1443,12 +1508,12 @@ def _convert_user_str_2_dict(data):
 
     return t_user_dict
 
-def get_users_per_tenant():
+def get_list_users_per_tenant():
     '''
     This function is to get list of users in given tenant with proper format (list of user_dict info) to store into DB
     :return:
     '''
-    users_data, keystone = _get_users_per_tenant_details()
+    users_data, keystone = __get_list_users_per_tenant()
     tenantlist = keystone.tenants.list()
     t_users_list = []
     for tenant in tenantlist:
@@ -1456,7 +1521,8 @@ def get_users_per_tenant():
 
         for t_user in t_users_data:
             t_user_dict = _convert_user_str_2_dict(t_user)
-            #insert tenant name and tenant id into t_user_dict to identify exactly which tenant user is being located - easier to keep track when storing in DB
+            # insert tenant name and tenant id into t_user_dict to identify exactly which tenant that user is belong to
+            # easier to keep track when storing in DB
             t_user_dict['tenant_name'] = tenant.name
             t_user_dict['tenant_id'] = tenant.id
             t_users_list.append(t_user_dict)
@@ -1464,7 +1530,7 @@ def get_users_per_tenant():
     return t_users_list
 
 
-def get_user_compute_quota():
+def get_resource_usage_compute_for_all_users_in_all_tenants():
     '''
     this function is to get users quota in a given tenant for compute, networks and storage
     :return: user quotas for each kind of resources such as : compute, network or storage
@@ -1481,8 +1547,8 @@ def get_user_compute_quota():
         # print " in tenant"
         # print tenant.name
         # invoke another function to get new keystone client for getting users list per tenant
-        t_keystone = get_keystone(tenant.name)
-        novaclient = get_nova_client(tenant.name)
+        t_keystone = get_keystone(tenant.id)
+        novaclient = get_nova_client(tenant.id)
         # using that above keystone client for list out users in given tenant
         t_users_list = t_keystone.tenants.list_users(tenant.id)
         # print t_users_list
@@ -1503,16 +1569,6 @@ def get_user_compute_quota():
             users_util_compute['tenant_id']                       = tenant.id
             users_util_compute['user_name']                       = user.name
             users_util_compute['user_id']                         = user.id
-            # vmem meters
-            users_util_compute['max_vmem']                        = user_quota_compute.ram
-            users_util_compute['used_vmem']                       = 0
-            users_util_compute['reserved_vmem']                   = 0
-            users_util_compute['available_vmem']                  = users_util_compute['max_vmem'] - (users_util_compute['used_vmem'] + users_util_compute['reserved_vmem'])
-            users_util_compute['percentage_vmem_used']            = ((users_util_compute['used_vmem']) / (users_util_compute['max_vmem']))*100
-            users_util_compute['percentage_vmem_reserved']        = ((users_util_compute['reserved_vmem']) / (users_util_compute['max_vmem']))*100
-            # including used + reserved resources
-            users_util_compute['percentage_total_vmem_usage']      = ((users_util_compute['reserved_vmem'] + users_util_compute['used_vmem']) /
-                                                                      (users_util_compute['max_vmem']))*100
             # vcpus meters
             users_util_compute['max_vcpus']                       = user_quota_compute.cores
             users_util_compute['used_vcpus']                      = 0
@@ -1523,9 +1579,29 @@ def get_user_compute_quota():
             # including used + reserved resources
             users_util_compute['percentage_total_vcpus_usage']    = ((users_util_compute['reserved_vcpus'] + users_util_compute['used_vcpus']) /
                                                                         (users_util_compute['max_vcpus']))*100
+            # vmem meters
+            users_util_compute['max_vmem']                        = user_quota_compute.ram
+            users_util_compute['used_vmem']                       = 0
+            users_util_compute['reserved_vmem']                   = 0
+            users_util_compute['available_vmem']                  = users_util_compute['max_vmem'] - (users_util_compute['used_vmem'] + users_util_compute['reserved_vmem'])
+            users_util_compute['percentage_vmem_used']            = ((users_util_compute['used_vmem']) / (users_util_compute['max_vmem']))*100
+            users_util_compute['percentage_vmem_reserved']        = ((users_util_compute['reserved_vmem']) / (users_util_compute['max_vmem']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_vmem_usage']      = ((users_util_compute['reserved_vmem'] + users_util_compute['used_vmem']) /
+                                                                      (users_util_compute['max_vmem']))*100
             # server groups meters
             # users_quota_compute['max_server_groups']            = user_quota_compute.server_groups
             # users_quota_compute['max_server_group_members']     = user_quota_compute.server_group_members
+            # instance count meters
+            users_util_compute['max_vnfs']                        = user_quota_compute.instances
+            users_util_compute['used_vnfs']                       = 0
+            users_util_compute['reserved_vnfs']                   = 0
+            users_util_compute['available_vnfs']                  = users_util_compute['max_vnfs'] - (users_util_compute['used_vnfs'] + users_util_compute['reserved_vnfs'])
+            users_util_compute['percentage_vnfs_used']            = ((users_util_compute['used_vnfs']) / (users_util_compute['max_vnfs']))*100
+            users_util_compute['percentage_vnfs_reserved']        = ((users_util_compute['reserved_vnfs']) / (users_util_compute['max_vnfs']))*100
+            # including used + reserved resources
+            users_util_compute['percentage_total_vnfs_usage']     = ((users_util_compute['reserved_vnfs'] + users_util_compute['used_vnfs']) /
+                                                                 (users_util_compute['max_vnfs']))*100
             # Floating up meters
             users_util_compute['max_floating_ips']                = user_quota_compute.floating_ips
             users_util_compute['used_floating_ips']               = 0
@@ -1539,16 +1615,6 @@ def get_user_compute_quota():
             # fixed ip and key pairs meters
             users_util_compute['max_fixed_ips']                   = user_quota_compute.fixed_ips
             users_util_compute['max_key_pairs']                   = user_quota_compute.key_pairs
-            # instance count meters
-            users_util_compute['max_vnfs']                        = user_quota_compute.instances
-            users_util_compute['used_vnfs']                       = 0
-            users_util_compute['reserved_vnfs']                   = 0
-            users_util_compute['available_vnfs']                  = users_util_compute['max_vnfs'] - (users_util_compute['used_vnfs'] + users_util_compute['reserved_vnfs'])
-            users_util_compute['percentage_vnfs_used']            = ((users_util_compute['used_vnfs']) / (users_util_compute['max_vnfs']))*100
-            users_util_compute['percentage_vnfs_reserved']        = ((users_util_compute['reserved_vnfs']) / (users_util_compute['max_vnfs']))*100
-            # including used + reserved resources
-            users_util_compute['percentage_total_vnfs_usage']     = ((users_util_compute['reserved_vnfs'] + users_util_compute['used_vnfs']) /
-                                                                 (users_util_compute['max_vnfs']))*100
             # Other meters
             users_util_compute['max_security_group_rules']        = user_quota_compute.security_group_rules
             users_util_compute['max_security_groups']             = user_quota_compute.security_groups
@@ -1562,7 +1628,7 @@ def get_user_compute_quota():
     print per_tenant_users_util_compute_list
     return per_tenant_users_util_compute_list
 
-def get_user_network_quota():
+def get_resource_usage_network_for_all_users_in_all_tenants():
     '''
     this function is to get users quota in a given tenant for compute, networks and storage
     :return: user quotas for each kind of resources such as : compute, network or storage
@@ -1576,8 +1642,8 @@ def get_user_network_quota():
 
     for tenant in tenant_list:
         # invoke another function to get new keystone client for getting users list per tenant
-        t_keystone = get_keystone(tenant.name)
-        neutron = get_neutron_client(tenant.name)
+        t_keystone = get_keystone(tenant.id)
+        neutron = get_neutron_client(tenant.id)
 
         # using that above keystone client for list out users in given tenant
         t_users_list = t_keystone.tenants.list_users(tenant.id)
@@ -1674,7 +1740,8 @@ def get_user_network_quota():
 
     return users_util_networks_list
 
-def get_user_storage_quota():
+
+def get_resource_usage_storage_for_all_users_in_all_tenants():
     '''
     user storage quota is not supported yet at this phase
     (https://blueprints.launchpad.net/cinder/+spec/per-project-user-quotas-support)
@@ -1682,221 +1749,12 @@ def get_user_storage_quota():
     '''
     return 0
 
-def add_quotas_limits_2_db(mydb, table, data):
-    result = mydb.add_row_rs(table, data)
-    if result > 0:
-        print "Added data to %s table successfully"
-    return result
-
-def __init_users_compute_util_2_db(mydb, table, rsv):
-    # polling compute openstack service for getting updated compute resource usage.
-    # when compute resource value of user is not initiated (empty with that user_id and tenant_id in DB)
-    # Above specification is to identify exactly which user from particular tenant, compute resources would be initiated into DB table
-    data_list = get_user_compute_quota()
-    for data in data_list:
-        if data['user_id'] == rsv['user_id'] and data['tenant_id'] == rsv['tenant_id'] and data['user_name'] != 'admin': # need to exclude admin user as admin-ids are same in all tenants
-            print " Got it ! initiative data for user-id: %s and tenant-id: %s in %s DB table" % (data['user_id'], data['tenant_id'], table)
-            result, added_uuid = mydb.add_row_rs(table, data)
-            print type(data)
-            return data, result, added_uuid # at the first meet matched user-id, loop will be broken. save memory than put return out of loop
-
-def init_users_compute_util_2_db(mydb, table, rsv):
-    init_data, result, added_uuid = __init_users_compute_util_2_db(mydb, table, rsv)
-    print type(init_data)
-    if result > 0 and init_data is not None:
-        print "Initiated dat for %s table successfully"
-        return init_data, result, added_uuid
-    elif result == 0 and init_data is None: # if we see this error TypeError: 'NoneType' object is not iterable, that means code jumps to here
-        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        print " FAILED to initiate data into DB table %s because user-id=%s and tenant-id=%s from RESERVATION request CAN NOT be found in DB table %s " \
-              "--> init_data is empty" % (table,rsv['user_id'], rsv['tenant_id'], table)
-        print "==========================================================================================================================="
-        print "WARNING !!! user-id: %s and tenant-id: %s from RESERVATION request are NOT EXISTING in DB and VIM OR user-id: %s is admin user." \
-              " Please sign up !!! Thanks." % (rsv['user_id'], rsv['tenant_id'], rsv['user_id'])
-        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        return result
-
-
-# ---------------------------------------------------------------------------------------------------------------------------
-#  START --- Get total capacity of compute resources from hyper-visor of compute node #TODO need to take into account multi-compute nodes scenario
-#---------------------------------------------------------------------------------------------------------------------------
-
-# --
-# get_hypervisor_total_compute_utilization()
-# Only admnin user who have administrator permission to query total compute capacity from hyper-visor in a compute node
-# Returns details of hyper-visor utilization for a compute node (all tenants-value depend on number of deployed compute node)
-#
-def get_hypervisor_all_compute_utilization(): #TODO need to modify other related codes when completely moving these functions to here from sh_total_compute_capacity_util_poll_op.py file
-    nova = get_nova_client('admin') # Statically set "admin"
-    total_cap_compute = nova.hypervisor_stats.statistics()._info
-    vcpu_allocation_ratio = 16
-    memory_allocation_ratio = 1
-    return {
-                'servers': [total_cap_compute['count'], total_cap_compute['current_workload']],
-                'vdisk_capacity': {
-                         #'uuid' : 12, # using UUID for keeps track total compute capacity for each type of resource
-                         'disk_total': total_cap_compute['local_gb'],
-                         'disk_allocated' : total_cap_compute['local_gb_used'],
-                         'disk_available' : total_cap_compute['free_disk_gb'],
-                         'disk_reserved' : 0},
-                'vmem_capacity': {
-                           #'uuid' : 13,
-                           'mem_total':  total_cap_compute['memory_mb'],
-                           'vmem_total': total_cap_compute['memory_mb'] * memory_allocation_ratio,
-                           'vmem_allocated': total_cap_compute['memory_mb_used'],
-                           'mem_available': total_cap_compute['free_ram_mb'],
-                           'vmem_available': (total_cap_compute['memory_mb'] * memory_allocation_ratio -
-                                    total_cap_compute['memory_mb_used']),
-                           'vmem_reserved': 0},
-                'instances': [total_cap_compute['running_vms']],
-                'vcpu_capacity': {
-                    #'uuid': 14,
-                    'cpu_total': total_cap_compute['vcpus'],
-                    'vcpu_total': total_cap_compute['vcpus'] * vcpu_allocation_ratio,
-                    'vcpu_allocated': total_cap_compute['vcpus_used'],
-                    'cpu_available': total_cap_compute['vcpus'],  # curently nova api returns number of physical cores instead of virtual cores as expected
-                    'vcpu_available' : (total_cap_compute['vcpus'] * vcpu_allocation_ratio -
-                              total_cap_compute['vcpus_used']),
-                    'vcpu_reserved': 0
-                }}
-
-# --
-# get total capacity for compute: vcpu, vmem, vdisk by invoke get_hypervisor_all_compute_utilization
-#
-def all_vcpu_cap():
-    '''
-    this function is to grab vcpus resources from hypervisor with output format as below
-    {'vcpu_total': 32, 'vcpu_available': 32, 'cpu_total': 2, 'vcpu_used': 0, 'cpu_available': 2}
-    :return: {'vcpu_total': 32, 'vcpu_available': 32, 'cpu_total': 2, 'vcpu_used': 0, 'cpu_available': 2}
-    '''
-    all_compute_cap = get_hypervisor_all_compute_utilization()
-    vcpus_capacity = all_compute_cap['vcpu_capacity']
-    return vcpus_capacity
-
-def all_vmem_cap():
-    all_compute_cap = get_hypervisor_all_compute_utilization()
-    vmem_capactity = all_compute_cap['vmem_capacity']
-    return vmem_capactity
-
-def all_vdisk_cap():
-    all_compute_cap = get_hypervisor_all_compute_utilization()
-    vdisk_capactity = all_compute_cap['vdisk_capacity']
-    return vdisk_capactity
-#---------------------------------------------------------------------------------------------------------------------------
-# END --- Get total capacity of compute resources from hyper-visor of compute node
-#---------------------------------------------------------------------------------------------------------------------------
-
-
-
-# --
-# csv_report()
-# Write out the csv formated dict values
-#     [d_report]  single level ordered dict that is to be rendered as a table
-#     [l_header]  table headers that double up as keys to the d_report dict
-#     [file_name] the file that the final csv is to be written into
-#
-# Note : d_report must be ordered dict for aggregates to be printed last
-# def csv_report(d_report,l_header,file_name):
-#     global _debug
-#     if _debug == True:
-#         print "[+] Formating report as CSV ..."
-#         print d_report
-#         print l_header
-#
-#     # If file not writable then console
-#     file_handle = open(file_name,'w') if file_name else sys.stdout
-#
-#     csv_writer = csv.writer(file_handle)
-#
-#     # Construct headers to be written to csv first
-#     # first element intentionally left blank for this function to be generic
-#     t_tenant_header = []
-#     t_tenant_header.append("")
-#
-#     for header in l_header:
-#         t_tenant_header.append(header)
-#
-#     csv_writer.writerow(t_tenant_header)
-#
-#     # Construct each tenant row as a list so that it can be consumed by pycsv
-#     for k in d_report:
-#         t_tenant_name = k
-#         t_tenant_values = d_report[k]
-#
-#         t_tenant_row = []
-#         t_tenant_row.append(t_tenant_name)
-#         for header in l_header:
-#             t_tenant_row.append(t_tenant_values[header])
-#
-#         csv_writer.writerow(t_tenant_row)
-
-
-# def main():
-#     parser = argparse.ArgumentParser(description="Command-line interface for generating reports for Openstack clusters")
-#
-#     group = parser.add_mutually_exclusive_group(required=True)
-#     group.add_argument('-f', '--flavorcount', help='Per tenant flavorcount',
-#                        action="store_true", default=False)
-#     group.add_argument('-u', '--utilization', help='Per tenant utilization',
-#                        action="store_true", default=False)
-#
-#     parser.add_argument('-o', '--output', help='Destination file to store result')
-#     parser.add_argument('-d', '--debug', help='Enable Debug',action="store_true")
-#     parser.add_argument('--version', action='version', version='1.0')
-#
-#     cli_opts = parser.parse_args()
-#
-#     output_file = cli_opts.output
-#
-#     if cli_opts.debug == True:
-#         global _debug
-#         _debug = True
-#         print "[+] %s" % cli_opts
-#
-#     if cli_opts.flavorcount == True:
-#         # Compute dict of tenantwise flavorcount for all tenants
-#         report = get_all_tenant_flavorcount()
-#
-#         # Prepare report header
-#         report_headers = []
-#         for flavors in flavorListDefault:
-#             report_headers.append(flavors)
-#         report_headers.append("custom")
-#
-#         # Write the report alongwith header to target
-#         csv_report(report,report_headers,output_file)
-#         return
-#
-#     if cli_opts.utilization == True:
-#         # Compute tenantwise utilization for all tenants
-#         report = get_all_tenant_utilization()
-#
-#         # Prepare report header
-#         report_headers = [
-#             'Inst_Prov',
-#             'Inst_Active',
-#             'VCPU_Prov',
-#             'VCPU_Active',
-#             'RAM_Prov',
-#             'RAM_Active',
-#             'Disk_Prov_GB',
-#             'FloatIP_Alloc',
-#             'FloatIP_Disassoc',
-#             'Vols_Prov',
-#             'Vols_Prov_GB',
-#             'Object_Containers',
-#             'Object_Count',
-#             'Object_Storage_Used_GB'
-#         ]
-#         # Write header + report to target
-#         csv_report(report,report_headers,output_file)
-
 
 def go_main():
     return 0
 
 if __name__ == "__main__":
-    # data = get_all_tenant_utilization()
+    # data = get_resource_usage_all_tenants()
     # attributes = data['admin']['Networks_Attributes']  #get tenant from tenant table nhe
     # print attributes
     # print attributes[0]#['status']
@@ -1906,7 +1764,7 @@ if __name__ == "__main__":
     # # print get_hypervisor_all_compute_utilization()
     #
 
-    # data = get_all_tenant_flavorcount()
+    # data = get_flavor_usage_all_tenants()
     # data = get_quotas_limit_details()
     # json_data = data['admin']['limits_compute']
     # print type(json_data)
@@ -1919,13 +1777,15 @@ if __name__ == "__main__":
 
     try:
         mydb = resource_db.resource_db()
-        if mydb.connect_db(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+        if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
-        data_list = get_user_compute_quota()
-        # data_list = get_user_network_quota()
-        for data in data_list:
-            add_quotas_limits_2_db(mydb, table='users_util_compute_rm', data=data)
+        # data_list = get_resource_usage_compute_for_all_users_in_all_tenants()
+        # # data_list = get_resource_usage_network_for_all_users_in_all_tenants()
+        # for data in data_list:
+        #     add_resource_2_db(mydb, table='users_util_compute_rm', data=data)
+        d= _get_resource_usage_tenant('25970fbcfb0a4c2fb42ccc18f1bccde3')
+        print d['port']
 
     except (KeyboardInterrupt, SystemExit):
         print 'Exiting Resource Management'
@@ -1936,6 +1796,6 @@ if __name__ == "__main__":
     # get_quotas_limit_details()
 
     # check user list
-    # users_dat= get_users_per_tenant()
+    # users_dat= get_list_users_per_tenant()
     # print users_dat
     # get_user_quota()
