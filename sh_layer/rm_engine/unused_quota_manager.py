@@ -140,10 +140,6 @@ class QuotaManager(manager.Manager):
             raise
 
 
-def list_opts():
-    yield batch_opt_group.name, batch_opts
-
-
 if __name__ == "__main__":
     quota_mana= QuotaManager()
     data = quota_mana.get_total_usage_for_tenant('admin')
