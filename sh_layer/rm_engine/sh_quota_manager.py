@@ -18,7 +18,7 @@ from sh_layer.global_info import *
 #######################################################################
 
 # Create resource usage (using with reservation operations probably: create reservation...)
-def create_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved,  until_refresh=False):
+def create_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved, until_refresh):
     '''
     Create resource usage for a specific resource in a given tenant/project
     :param nfvodb: db connection object
@@ -224,8 +224,29 @@ def quota_destroy_by_project(*args, **kwargs):
 # implement quota check, quota calculation,
 ########################################################
 
-def available_check_for_project(nfvodb, values, project_id=None):
+def increase_resource_usage(nfvodb, project_id, values):
+    # get  current resource usage ()
+    #
+    # calculate base on values
+    #
+    # update to db
+    # consider which case for reservation ---> update reserved OR allocated --> in_use
+    # by checking values if 'in_use' or 'reserved' is present
 
+    return
+def decrease_resource_usage(nfvodb, project_id, values):
+
+    return
+
+# check availability for resource(s) in a given project
+def available_resource_check_for_project(nfvodb, values, project_id=None):
+    '''
+    checking availability for resource(s) in a given project based on assigned quota
+    :param nfvodb: db object
+    :param values: (dict) keys/values of resource(s) that are used for check
+    :param project_id:  specific a given project
+    :return:
+    '''
     # get applicable quota for a project
     quotas = get_quotas_for_project(nfvodb, project_id)
 
@@ -252,27 +273,15 @@ def available_check_for_project(nfvodb, values, project_id=None):
              quotas[r] <= delta + rs_usage[r]['in_use'] + rs_usage[r]['reserved']]
 
     if overs:
-        flag =False
+        flag = False
         nlog.error("ERROR: quotas exceed for the resources '%s'")
         raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
         return flag
     else:
-        flag =True
+        flag = True
         return flag
 
-def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
-    '''
-    Get number of current using vnfs in a project
-    :param vnfd_id:
-    :param action: ADD --> vnfd_using_cnt ++
-    DELETE --> vnfd_using_cnt --
-    :return:
-    '''
-    # get vnfd_using_cnt from vnfd_using_info table
-    result, vnfd_using_cnt = nfvodb.update_vnf_using_info_table(vnfd_id, action)
-    return result, vnfd_using_cnt
-
-def specific_available_resource_check_for_project(nfvodb, resource, project_id=None):
+def available_check_specific_resource_for_project(nfvodb, resource, project_id=None):
     # TODO (rickyhai) need to implement
     return
 
@@ -320,6 +329,18 @@ def limit_check(nfvodb, values, project_id=None):
     if overs:
         nlog.error("ERROR: quotas exceed for the resources '%s'", overs)
         raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
+
+def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
+    '''
+    Get number of current using vnfs in a project
+    :param vnfd_id:
+    :param action: ADD --> vnfd_using_cnt ++
+    DELETE --> vnfd_using_cnt --
+    :return:
+    '''
+    # get vnfd_using_cnt from vnfd_using_info table
+    result, vnfd_using_cnt = nfvodb.update_vnf_using_info_table(vnfd_id, action)
+    return result, vnfd_using_cnt
 
 def get_project_quotas(nfvodb,resources, project_id, usages=True, parent_project_id=None):
     """Retrieve quotas for a project.
@@ -372,49 +393,6 @@ class DbQuotaDriver(object):
     The default driver utilizes the local database.
     """
 
-    def _get_quotas(self, resources, keys, has_sync, project_id=None,
-                    parent_project_id=None):
-        """A helper method which retrieves the quotas for specific resources.
-
-        This specific resource is identified by keys, and which apply to the
-        current context.
-
-        :param context: The request context, for access checks.
-        :param resources: A dictionary of the registered resources.
-        :param keys: A list of the desired quotas to retrieve.
-        :param has_sync: If True, indicates that the resource must
-                         have a sync attribute; if False, indicates
-                         that the resource must NOT have a sync
-                         attribute.
-        :param project_id: Specify the project_id if current context
-                           is admin and admin wants to impact on
-                           common user's tenant.
-        :param parent_project_id: The id of the current project's parent,
-                                  if any.
-        """
-
-        # Filter resources
-        if has_sync:
-            sync_filt = lambda x: hasattr(x, 'sync')
-        else:
-            sync_filt = lambda x: not hasattr(x, 'sync')
-        desired = set(keys)
-        sub_resources = {k: v for k, v in resources.items()
-                         if k in desired and sync_filt(v)}
-
-        # Make sure we accounted for all of them...
-        if len(keys) != len(sub_resources):
-            unknown = desired - set(sub_resources.keys())
-            raise t_exceptions.QuotaResourceUnknown(unknown=sorted(unknown))
-
-        # Grab and return the quotas (without usages)
-        quotas = self.get_project_quotas(context, sub_resources,
-                                         project_id,
-                                         context.quota_class, usages=False,
-                                         parent_project_id=parent_project_id)
-
-        return {k: v['limit'] for k, v in quotas.items()}
-
 
     def commit(self, reservations, project_id=None):
         """Commit reservations.
@@ -449,16 +427,6 @@ class DbQuotaDriver(object):
         db_api.reservation_rollback(context, reservations,
                                     project_id=project_id)
 
-    def destroy_by_project(self, project_id):
-        """Destroy all limit quotas associated with a project.
-
-        Leave usage and reservation quotas intact.
-
-        :param context: The request context, for access checks.
-        :param project_id: The ID of the project being deleted.
-        """
-        db_api.quota_destroy_by_project(context, project_id)
-
     def expire(self, context):
         """Expire reservations.
 
@@ -473,7 +441,7 @@ class DbQuotaDriver(object):
 
 
 
-def quota_reserve(context, resources, quotas, deltas, expire,
+def quota_reserve(nfvodb, resources, quotas, deltas, expire,
                   until_refresh, max_age, project_id=None):
     elevated = context.elevated()
     with context.session.begin():
@@ -704,7 +672,7 @@ def load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
 # get number of vnfs in a reservation dict
 # return a dict of reserved quota  after calculating with below formula:
 # reserved = number of vnfs * flavor_detail
-def quota_reserved_from_flavour_info_table(nfvodb, vnfd_flavor_id, number_vnfs):
+def quota_reserved(nfvodb, vnfd_flavor_id, number_vnfs):
     '''
     get reserved resource for instantiating reservation
     :param vnfd_flavor_id: flavour id
@@ -724,7 +692,7 @@ def quota_reserved_from_flavour_info_table(nfvodb, vnfd_flavor_id, number_vnfs):
         nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
         return False
 
-def quota_allocated_from_flavour_info_table(nfvodb, vnfd_flavor_id):
+def quota_allocated(nfvodb, vnfd_flavor_id):
     '''
     get allocated resources that required when NVFNO send resource allocation message to VIM
     :param nfvodb:

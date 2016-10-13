@@ -73,7 +73,7 @@ if __name__ == "__main__":
         # test limit_check() and available_check() functions
         values = {'vcpus': 10, 'vnfs' : 10, 'memory': 11, 'network': 10,}
         # limit_check(nfvodb, values, project_id ='25970fbcfb0a4c2fb42ccc18f1bccde3')
-        re= available_check_for_project(nfvodb,values,project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
+        re= available_resource_check_for_project(nfvodb, values, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
         # print re
 
         # test covert resource usage function
