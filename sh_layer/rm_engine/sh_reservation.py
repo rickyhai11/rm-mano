@@ -1,3 +1,8 @@
+'''
+Reservation, All function are related to reservation service should be implemented here and they are used by
+NFVO API or RM API modules
+'''
+
 import datetime
 import time
 
@@ -12,70 +17,37 @@ from sh_layer.rm_engine.sh_quota_manager import check_user_compute_capacity
 from utils import todo
 
 
-# global global_config
-# global_config = {'db_host': '116.89.184.43',
-#                   'db_user': 'root',
-#                   'db_passwd': '',
-#                   'db_name': 'mano_db'
-#                  }
-# global data
-# data = {'reservation_id': '5555',
-#         'label': 'test4',
-#         'host_id': "cfcb18eef55b4b03bb075ea106fe771f",
-#         'host_name': 'hai_compute',
-#         'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
-#         'user_name': 'demo',
-#         'tenant_id': '4a766494021447c7905b81adae050a97',
-#         'tenant_name': 'demo',
-#         'start_time': '2016-05-23 18:04:00',
-#         'end_time': '2016-05-23 18:09:00',
-#         'flavor_id': 1,
-#         'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
-#         'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-#         'number_instance': '1',
-#         'ns_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-#         'status': 'ACTIVE',
-#         'summary': 'reservation testing'
-#         }
-# vmem_capa= {'uuid': 3, "mem_total": 12, "vmem_total": 12, "vmem_used": 5, "mem_available": 5, "vmem_available": 6}
-#
-# vcpu={'uuid': 13, "cpu_total": 15, "vcpu_total": 20, "vcpu_used": 10, "cpu_available": 8, "vcpu_available": 65}
-#             #"created_at": '2016-04-13 12:30:20', "modified_at": '2016-04-13 12:30:59' }
-# flavor_dict = {'flavor_id': 2, 'name': 'm.medium', 'ram': 1024, 'disk': 2, 'vcpu': 2}
-#
-# image_dict = {'image_id': '19f7025b-b78a-4bf0-bc37-0cba68e16b10', 'name': 'ubuntu_01'}
-
 class sh_reservation():
     def __init__(self):
         todo
 
-    def create_reservation(self, mydb, data):
+    def create_reservation(self, nfvodb, data):
         print "Checking available resources. Please be patient..."
-        rp = check_user_compute_capacity(mydb=mydb, rsv=data)
+        rp = check_user_compute_capacity(mydb=nfvodb, rsv=data)
         if rp:
-            result = mydb.add_row_rs('reservation', data)
+            result = nfvodb.add_row_rs('reservation', data)
             if result > 0:
                 print "created reservation successfully "
                 return result
         else:
             print 'Resources error occurred: resources are exhausted. Please recheck'
 
-    def delete_reservation(self, table, mydb, reservation_id):
-        result = mydb.delete_row_by_rsv_id(table_name=table, reservation_id=reservation_id)
+    def delete_reservation(self, table, nfvodb, reservation_id):
+        result = nfvodb.delete_row_by_rsv_id(table_name=table, reservation_id=reservation_id)
         if result > 0:
             print "deleted successfully a reservation with reservation_id: %s in table %s" % (reservation_id, table)
             return result, reservation_id
 
-    def update_reservation(self, mydb, reservation_id, new_values_dict):
-        result, reservation_id = mydb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
-                                                    new_values_dict=new_values_dict)
+    def update_reservation(self, nfvodb, reservation_id, new_values_dict):
+        result, reservation_id = nfvodb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
+                                                       new_values_dict=new_values_dict)
         if result > 0:
             print "sh_reservation.update_reservation() - updated reservation successfully"
             return result, reservation_id
 
-    def update_time_stamp_reservation(self, mydb, reservation_id, start_time, end_time):
-        result = mydb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
-                                                    start_time=start_time, end_time=end_time)
+    def update_time_stamp_reservation(self, nfvodb, reservation_id, start_time, end_time):
+        result = nfvodb.update_row_timestamp_by_rsv_id(table_name='reservation', reservation_id=reservation_id,
+                                                       start_time=start_time, end_time=end_time)
         if result > 0:
             print "updated starting time and ending time successfully for reservation_id: %s" % reservation_id
             return result, reservation_id
@@ -83,8 +55,8 @@ class sh_reservation():
     def list_rsv_by_id(self):
         todo
 
-    def list_all_created_rsv(self, mydb):
-            list_created_rsv = mydb.get_rsv_by_status(status='ACTIVE')
+    def list_all_created_rsv(self, nfvodb):
+            list_created_rsv = nfvodb.get_rsv_by_status(status='ACTIVE')
             print list_created_rsv
             return list_created_rsv
 
@@ -96,14 +68,14 @@ class sh_control():
     def __init__(self):
         todo
 
-    def start_time_trigger(self, mydb):
+    def start_time_trigger(self, nfvodb):
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
                                                   url_admin="", user="admin", passwd="fncp2015")
         reservations = sh_reservation()
         print "start_time_trigger process is running"
         rsv_vnf_auth_dict = {}
         while True:
-            rsvs = reservations.list_all_created_rsv(mydb)
+            rsvs = reservations.list_all_created_rsv(nfvodb)
             for rsv in rsvs:
                 print rsv
                 start_time = rsv['start_time']
@@ -120,30 +92,30 @@ class sh_control():
                     rsv_vnf_auth_dict['vnf_id'] = vnf_id
                     print "Print out rsv_vnf_auth_dict:"
                     print rsv_vnf_auth_dict
-                    mydb.add_row_rs(table_name='rsv_vnf_auth_rm', row_dict=rsv_vnf_auth_dict)
+                    nfvodb.add_row_rs(table_name='rsv_vnf_auth_rm', row_dict=rsv_vnf_auth_dict)
                     print "Created vnf successfully"
             time.sleep(100)
 
 
-    def end_time_trigger(self, mydb):
+    def end_time_trigger(self, nfvodb):
 
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
                                                   url_admin="", user="admin", passwd="fncp2015")
         reservations = sh_reservation()
         print "end_time_trigger process is running"
         while True:
-            rsvs = reservations.list_all_created_rsv(mydb)
+            rsvs = reservations.list_all_created_rsv(nfvodb)
             for rsv in rsvs:
                 print rsv
                 end_time = rsv['end_time']
                 reservation_id = rsv['reservation_id']
-                listed, row = mydb.get_rsv_by_id(table_name='rsv_vnf_auth_rm', reservation_id=reservation_id)
+                listed, row = nfvodb.get_rsv_by_id(table_name='rsv_vnf_auth_rm', reservation_id=reservation_id)
                 vnf_id = row['vnf_id']
                 if (abs(end_time - datetime.datetime.now()) <= datetime.timedelta(minutes=1)):
                     nproject.delete_vapp(vnf_id)
                     time.sleep(3)
-                    reservations.delete_reservation(mydb=mydb, table='reservation', reservation_id=reservation_id)
-                    reservations.delete_reservation(mydb=mydb, table='rsv_vnf_auth_rm', reservation_id=reservation_id)
+                    reservations.delete_reservation(nfvodb=nfvodb, table='reservation', reservation_id=reservation_id)
+                    reservations.delete_reservation(nfvodb=nfvodb, table='rsv_vnf_auth_rm', reservation_id=reservation_id)
 
                     break
             time.sleep(2)
@@ -312,7 +284,7 @@ class vimconnector(vimconn.vimconnector):
 
             self.nova.servers.delete(vapp_id)
             time.sleep(7)
-           # subnetm = self.neutron.list_subnets(network_id = mgnt_network_id)['subnets'][0]
+            #subnetm = self.neutron.list_subnets(network_id = mgnt_network_id)['subnets'][0]
             #router = self.neutron.list_routers(name = 'management-ext')['routers'][0]
             #self.neutron.remove_interface_router(router['id'], { 'subnet_id' : subnetm['id'] } )
             #self.neutron.remove_gateway_router(router['id'])
@@ -356,10 +328,3 @@ class vimconnector(vimconn.vimconnector):
             print "get_tenant_vminstance" + error_text
         return error_value, error_text
 
-# def get_connect_db():
-#     mydb = resource_db.resource_db()
-#     print mydb
-#     if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
-#         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
-#         exit(-1)
-#     return mydb

@@ -157,7 +157,7 @@ if __name__ == '__main__':
     print vdisk_op_stats()
     print vcpu_op_stats()
     print vdisk_op_stats()
-    # load_flavors_by_id(flavor_id=1)
+    # load_flavors_from_vim(flavor_id=1)
 
 
         
