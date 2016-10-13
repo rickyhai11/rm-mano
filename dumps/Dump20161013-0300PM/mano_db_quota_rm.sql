@@ -1,0 +1,57 @@
+-- MySQL dump 10.13  Distrib 5.7.9, for Win64 (x86_64)
+--
+-- Host: 116.89.184.43    Database: mano_db
+-- ------------------------------------------------------
+-- Server version	5.5.46-0ubuntu0.14.04.2
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Table structure for table `quota_rm`
+--
+
+DROP TABLE IF EXISTS `quota_rm`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `quota_rm` (
+  `uuid` varchar(36) NOT NULL,
+  `project_id` varchar(36) NOT NULL,
+  `resource` varchar(36) NOT NULL,
+  `hard_limit` int(20) NOT NULL DEFAULT '0',
+  `allocated` int(20) NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` datetime DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`uuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT COMMENT='quotas for all resources';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `quota_rm`
+--
+
+LOCK TABLES `quota_rm` WRITE;
+/*!40000 ALTER TABLE `quota_rm` DISABLE KEYS */;
+INSERT INTO `quota_rm` VALUES ('8b35ea30-903d-11e6-9710-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','port',11,0,'0000-00-00 00:00:00','2016-10-12 05:13:14','0000-00-00 00:00:00'),('8b3722b0-903d-11e6-bf63-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','vnfs',11,0,'0000-00-00 00:00:00','2016-10-12 05:13:14','0000-00-00 00:00:00'),('8b37e600-903d-11e6-bc27-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','vcpus',11,0,'0000-00-00 00:00:00','2016-10-12 05:13:14','0000-00-00 00:00:00'),('8b38a951-903d-11e6-94ed-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','network',11,0,'0000-00-00 00:00:00','2016-10-12 05:13:14','0000-00-00 00:00:00'),('8b396c9e-903d-11e6-8d64-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','memory',11,0,'0000-00-00 00:00:00','2016-10-12 05:13:14','0000-00-00 00:00:00');
+/*!40000 ALTER TABLE `quota_rm` ENABLE KEYS */;
+UNLOCK TABLES;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+
+-- Dump completed on 2016-10-13 15:10:12
