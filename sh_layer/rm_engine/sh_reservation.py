@@ -39,8 +39,8 @@ class sh_reservation():
             return result, reservation_id
 
     def update_reservation(self, nfvodb, reservation_id, new_values_dict):
-        result, reservation_id = nfvodb.update_row_rsv(table_name='reservation', reservation_id=reservation_id,
-                                                       new_values_dict=new_values_dict)
+        result, reservation_id = nfvodb.update_reservation_for_project(table_name='reservation', reservation_id=reservation_id,
+                                                                       new_values_dict=new_values_dict)
         if result > 0:
             print "sh_reservation.update_reservation() - updated reservation successfully"
             return result, reservation_id

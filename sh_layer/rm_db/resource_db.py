@@ -195,40 +195,40 @@ class resource_db(utils_db):
             except (mdb.Error, AttributeError), e:
                 print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
-
-    def update_row_rsv(self, table_name, reservation_id, new_values_dict):
-        '''
-        Removes the old (based on reservation_id) and adds a new reservation with new values (new reservation is created as well)
-        Attribute
-        :param table_name: table where to insert
-        :param old_reservation:
-        :param new_values_dict: is a dictionary with format as below
-        :return: (delete, new_reservation_id)
-        '''
-        for retry_ in range(0, 2):
-            try:
-                with self.con:
-                    self.cur= self.con.cursor()
-                    sql = "DELETE FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
-                    print sql
-                    self.cur.execute(sql)
-                    deleted = self.cur.rowcount
-                    #print deleted
-                    if deleted > 0 and new_values_dict:
-                        print "Deleted successfully next step --> adding a new reservation for new values"
-                        self.add_row_rs(table_name, new_values_dict)
-                        print "Updated new values into %s table successfully" % table_name
-                        new_reservation_id = new_values_dict['reservation_id']
-
-                        return deleted, new_reservation_id
-
-                    else:
-                        print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
-                              "###### 'reservation_id': %s was not existing " \
-                              "in %s table ######" % (deleted, reservation_id, table_name)
-
-            except (mdb.Error, AttributeError), e:
-                print "resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
+    # unused code
+    # def update_reservation_for_project(self, table_name, reservation_id, new_values_dict):
+    #     '''
+    #     Removes the old (based on reservation_id) and adds a new reservation with new values (new reservation is created as well)
+    #     Attribute
+    #     :param table_name: table where to insert
+    #     :param old_reservation:
+    #     :param new_values_dict: is a dictionary with format as below
+    #     :return: (delete, new_reservation_id)
+    #     '''
+    #     for retry_ in range(0, 2):
+    #         try:
+    #             with self.con:
+    #                 self.cur= self.con.cursor()
+    #                 sql = "DELETE FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
+    #                 print sql
+    #                 self.cur.execute(sql)
+    #                 deleted = self.cur.rowcount
+    #                 #print deleted
+    #                 if deleted > 0 and new_values_dict:
+    #                     print "Deleted successfully next step --> adding a new reservation for new values"
+    #                     self.add_row_rs(table_name, new_values_dict)
+    #                     print "Updated new values into %s table successfully" % table_name
+    #                     new_reservation_id = new_values_dict['reservation_id']
+    #
+    #                     return deleted, new_reservation_id
+    #
+    #                 else:
+    #                     print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
+    #                           "###### 'reservation_id': %s was not existing " \
+    #                           "in %s table ######" % (deleted, reservation_id, table_name)
+    #
+    #         except (mdb.Error, AttributeError), e:
+    #             print "resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # update reservation for a given project
     def update_reservation_for_project(self, project_id, reservation_id, new_values_dict):
@@ -258,16 +258,20 @@ class resource_db(utils_db):
             nlog.info("Success : update reservation for a tenant/project ID '%s' and update values: '%s'", project_id, new_values_dict)
             return True, result[0]
 
+
+
+
+
     # vnfTid (vnf_id) DB operations that related to reservation, go here!
     ###################################################
 
     # call this function when vnf(s) are/is created successfully in VIM and vnftid should be updated accordingly
     #  to associated table 'rsv_vnf_rm'
-    def add_vnfTid_by_rsv_id(self, table_name, reservation_id, vnf_id):
+    def add_vnf_id_by_rsv_id(self, table_name, reservation_id, vnf_id):
         '''
-        to update list of vnf_id from a reservation to table 'rsv_vnf_rm'
-        :param talble_name: name of table
-        :param reservation_id: esxting reservation in DB
+        to add list of vnf_id from a reservation to table 'rsv_vnf_rm'
+        :param talble name: name of table
+        :param reservation_id: existing reservation in DB
         :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
         triggered, reservation status "Running" and vnf_id(s) has been instantiated
         :return: result and vnf_id
@@ -317,12 +321,13 @@ class resource_db(utils_db):
     # vnfdId DB operations, go here
     ###################################################
 
-    def _get_vnfdId_by_rsv_id(self, reservation_id, vnfdId):
+    def _get_vnfd_id_by_rsv_id(self, reservation_id, vnfdId):
         '''
-        check in vnfdid_rsv_rm table if (reservation_id, vnfdId) is already present
+        using to get a specific vnfd_id that associated with a reservation id
+        using: to check in vnfdid_rsv_rm table if (reservation_id, vnfdId) is already present
         :param reservation_id:
         :param vnfdId:
-        :return:
+        :return: result count and row
         '''
         for retry_ in range(0,2):
             try:
@@ -333,13 +338,20 @@ class resource_db(utils_db):
                     row = self.cur.fetchall()
                     return self.cur.rowcount, row
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.get_vnfdId_by_rsv_id DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.get_vnfd_id_by_rsv_id DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_ == 1:
                     return r,c
 
-    def get_vnfdId_by_rsv_id(self, reservation_id, vnfdId):
-        return self._get_vnfdId_by_rsv_id(reservation_id, vnfdId)
+    def get_vnfd_id_by_rsv_id(self, reservation_id, vnfd_id):
+        '''
+        using to get a specific vnfd_id that associated with a reservation id
+        using: to check in vnfdid_rsv_rm table if (reservation_id, vnfdId) is already present
+        :param reservation_id:
+        :param vnfd_id:
+        :return: result count and row
+        '''
+        return self._get_vnfd_id_by_rsv_id(reservation_id, vnfd_id)
 
     # this function is called only after a reservation is created to track vnfdId(s) with co-responding reservation(s)
     # n-n relationship between vnf descriptor table and reservation table
@@ -353,7 +365,7 @@ class resource_db(utils_db):
         :return: result and vnf_id
         '''
         # are existing in the same row in DB table (not duplicated row)
-        result, row = self._get_vnfdId_by_rsv_id(reservation_id, vnfdId)
+        result, row = self._get_vnfd_id_by_rsv_id(reservation_id, vnfdId)
         if result < 0:
             nlog.error("vnfdId: %s for reservation_id %s is already present in DB" % (vnfdId, reservation_id))
             return False
@@ -377,7 +389,7 @@ class resource_db(utils_db):
     # TODO (rickyhai) update behaviors when reservation status = 'ACTIVE' and 'INACTIVE' ?
     def update_vnfdId_by_rsv_id(self, table_name, reservation_id, vnfdId):
         '''
-        to update list of vnf_id from a reservation to table 'sv_vnf_auth_rm'
+        to update list of vnf_id from a reservation to table 'rsv_vnf_auth_rm'
         :param talble_name:
         :param reservation_id: esxting reservation in DB
         :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
@@ -398,32 +410,50 @@ class resource_db(utils_db):
             except (mdb.Error, AttributeError), e:
                 print "resource_db.update_vnfdId_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
-
-    def get_rsv_by_id(self, table_name, reservation_id):
+    # get a specific reservation in a given project by reservation ID
+    # don't need to use project_id in query condition as reservation_id is unique in system
+    def get_rsv_by_id(self, reservation_id):
         '''
-        this function is to list a reservation from DB table with reservation_id
-        :param table_name:
+        this function is to query a specific reservation in a given project with reservation_id
         :param reservation_id:
-        :return:
+        :return: listed (rows count),rows (reservation data)
         '''
-        try:
-            with self.con:
-                self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
-                sql = "SELECT * FROM %s WHERE reservation_id= '%s'" % (table_name, reservation_id)
-                self.cur.execute(sql)
-                rows = self.cur.fetchone()
-                listed = self.cur.rowcount
-                print "query reservation with id %s successfully" % reservation_id
-                #print listed
-                print rows['reservation_id']
-                return listed, rows
-        except(mdb.Error, AttributeError), e:
-            print "resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
+                    sql = "SELECT * FROM reservation WHERE reservation_id= '%s'" % reservation_id
+                    self.cur.execute(sql)
+                    rows = self.cur.fetchone()
+                    listed = self.cur.rowcount
+                    print "query reservation with id %s successfully" % reservation_id
+                    #print listed
+                    print rows['reservation_id']
+                    return listed, rows
+            except(mdb.Error, AttributeError), e:
+                print "resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
+                return False, None
 
+    # get list of reservations for a given project
+    def get_reservation_for_project(self, project_id ):
+        '''
+        get list of reservations for a given project
+        :param project_id:
+        :return: result, list_reservations
+        '''
+        result, list_reservations = self._get_resource_for_tenant_from_db('reservation', project_id)
+        if result <= 0:
+            nlog.error("Error : get list of reservations from DB  (project ID =%s, )", project_id)
+            return False, None
+        else:
+            nlog.info("Success : get list of reservations for project ID '%s'", project_id)
 
+        return result, list_reservations
+
+    # get list of reservations by status
     def get_rsv_by_status(self, status):
         '''
-        Query reservation by a status
+        Query list of reservations by a status
         :param status:
         :return:
         '''
@@ -447,27 +477,6 @@ class resource_db(utils_db):
         #TODO (ricky) implement later in next phase
         return rsv_id
 
-    # common function- shared function for get values of a column in a table
-    def get_column_from_table(self, table_name, column):
-        '''
-        this function is to get values of a column in a table
-        :param table_name:
-        :param column: name of column
-        :return: list of values for that coresponding column
-        '''
-        try:
-            with self.con:
-                self.cur= self.con.cursor()
-                sql = "SELECT %s FROM %s" % (column, table_name)
-                print sql
-                self.cur.execute(sql)
-                rows = self.cur.fetchall()
-                print rows
-                #for row in rows:
-                #print row[0]
-                return rows
-        except(mdb.Error, AttributeError), e:
-            print "resource_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
 
     # Quota Management DB operations, go here
     #####################################################

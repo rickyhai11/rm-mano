@@ -718,6 +718,28 @@ class utils_db():
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c
 
+    # common function- shared function for get values of a column in a table
+    def get_column_from_table(self, table_name, column):
+        '''
+        this function is to get values of a column in a table
+        :param table_name:
+        :param column: name of column
+        :return: list of values for that coresponding column
+        '''
+        try:
+            with self.con:
+                self.cur= self.con.cursor()
+                sql = "SELECT %s FROM %s" % (column, table_name)
+                print sql
+                self.cur.execute(sql)
+                rows = self.cur.fetchall()
+                print rows
+                #for row in rows:
+                #print row[0]
+                return rows
+        except(mdb.Error, AttributeError), e:
+            print "utils_db.get_column_from_table DB exception %d: %s" % (e.args[0], e.args[1])
+
 
 
 
