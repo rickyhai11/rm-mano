@@ -21,11 +21,11 @@ class sh_reservation():
     def __init__(self):
         todo
 
-    def create_reservation(self, nfvodb, data):
+    def create_reservation(self, nfvodb, rsv_content):
         print "Checking available resources. Please be patient..."
-        rp = check_user_compute_capacity(mydb=nfvodb, rsv=data)
+        rp = check_user_compute_capacity(mydb=nfvodb, rsv=rsv_content)
         if rp:
-            result = nfvodb.add_row_rs('reservation', data)
+            result = nfvodb.add_row_rs('reservation', rsv_content)
             if result > 0:
                 print "created reservation successfully "
                 return result
@@ -33,7 +33,7 @@ class sh_reservation():
             print 'Resources error occurred: resources are exhausted. Please recheck'
 
     def delete_reservation(self, table, nfvodb, reservation_id):
-        result = nfvodb.delete_row_by_rsv_id(table_name=table, reservation_id=reservation_id)
+        result = nfvodb.delete_row_by_rsv_id(table=table, reservation_id=reservation_id)
         if result > 0:
             print "deleted successfully a reservation with reservation_id: %s in table %s" % (reservation_id, table)
             return result, reservation_id
@@ -121,9 +121,9 @@ class sh_control():
             time.sleep(2)
 
 
-'''
-This class is implemented for interacting with openstack (VIM)
-'''
+# '''
+# This class is implemented for interacting with openstack (VIM)
+# '''
 class vimconnector(vimconn.vimconnector):
     def __init__(self, uuid, name, tenant, url, url_admin=None, user=None, passwd=None, debug=True, config={}):
         '''using common constructor parameters. In this case

@@ -56,7 +56,6 @@ class resource_db(utils_db):
             if user is not None: self.user = user
             if passwd is not None: self.passwd = passwd
             if database is not None: self.database = database
-            # if cursorclass is not None: self.cursorclass = cursorclass
 
             self.con =mdb.connect(self.host, self.user, self.passwd, self.database)
 
@@ -130,8 +129,9 @@ class resource_db(utils_db):
             print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
             self.con.rollback()
 
-
-    def delete_row_by_rsv_id(self, table_name, reservation_id):
+    # to delete any row from any db tables that associated with reservation ID
+    # hence, keep table as argument
+    def delete_row_by_rsv_id(self, table, reservation_id):
         '''
         Delete a reservation from database with reservation ID from reservation table
         :param table:
@@ -141,7 +141,7 @@ class resource_db(utils_db):
             try:
                 with self.con:
                     self.cur= self.con.cursor()
-                    sql = "DELETE FROM %s WHERE reservation_id = '%s'" % (table_name, reservation_id)
+                    sql = "DELETE FROM %s WHERE reservation_id = '%s'" % (table, reservation_id)
                     print sql
                     self.cur.execute(sql)
                     deleted = self.cur.rowcount
@@ -172,7 +172,7 @@ class resource_db(utils_db):
             except (mdb.Error, AttributeError), e:
                 print "resource_db.delete_resource_by_name_uuid_for_tenant DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
-    def update_row_timestamp_by_rsv_id(self, table_name, reservation_id, start_time, end_time):
+    def update_row_timestamp_by_rsv_id(self, reservation_id, start_time, end_time):
         '''
         this function is to update start_time and end_time of a reservation from reservation table
         :param self:
@@ -185,8 +185,8 @@ class resource_db(utils_db):
             try:
                 with self.con:
                     self.cur= self.con.cursor()
-                    sql = "UPDATE %s SET start_time='%s',end_time='%s' WHERE reservation_id = '%s'" % (table_name,
-                                                                                                       start_time, end_time, reservation_id)
+                    sql = "UPDATE reservation SET start_time='%s',end_time='%s' WHERE reservation_id = '%s'" \
+                          % (start_time, end_time, reservation_id)
                     print sql
                     self.cur.execute(sql)
                     updated = self.cur.rowcount
@@ -196,7 +196,7 @@ class resource_db(utils_db):
                 print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # unused code
-    # def update_reservation_for_project(self, table_name, reservation_id, new_values_dict):
+    # def replace_reservation_by_rsv_id(self, table_name, reservation_id, new_values_dict):
     #     '''
     #     Removes the old (based on reservation_id) and adds a new reservation with new values (new reservation is created as well)
     #     Attribute

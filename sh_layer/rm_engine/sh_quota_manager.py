@@ -657,57 +657,125 @@ def reserve(nfvodb, resources, deltas, expire=None,
                                 CONF.quota.max_age,
                                 project_id=project_id)
 
+# get number of vnfs in a reservation dict
+# return a dict of reserved quota  after calculating with below formula:
+# reserved = number of vnfs * flavor_detail
+# def quota_reserved_by_flavor_vnfcount(content):
+#     '''
+#     get reserved resource for instantiating reservation
+#     reservation content should be provided that included needed info such as:flavor_id, number_vnfs...
+#     :param content: (dict) dict-reservation content (like in db form)
+#     :return: reserved resources (dict)
+#     '''
+#
+#     # get flavour id and number of vnfs from rsv content
+#     flavor_id = content['flavor_id']
+#     number_vnfs = int(content['number_vnfs'])
+#
+#     # flavor_details = {'vcpus': 1, 'memory': 512, 'gigabytes': 1}
+#     # loading based on flavour id
+#     flavor_details = load_flavors_from_vim(flavor_id)
+#
+#     # initiate reserved dict
+#     reserved = collections.defaultdict(dict)
+#     if number_vnfs > 0:
+#         for key, val in flavor_details.items():
+#             val *= int(number_vnfs)
+#             reserved[key] = val
+#         nlog.info("SUCCESS: Loading reserved based on flavour id '%s', reserved = %s", flavor_id, reserved)
+#         return reserved
+#     else:
+#         nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
 
+def load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
 
-# Old code
-#########################################################
-
-def build_reserved_resource_by_flavor_vnfusingcount(rsv):
-
-    # get number of instances in reservation dict and check how many instance in a rsv
-    # return a dict of reserved resources after calculating
-    # reserved resources = number of instances * flavor_detail
-    reserved_rs_dict = {}
-    flavor_id = rsv['flavor_id']
-    number_vnfs = int(rsv['number_vnfs'])
-    flavor_details = load_flavors_from_vim(flavor_id=flavor_id)
-    if number_vnfs == 1:
-        reserved_rs_dict['reserved_vcpus'] = flavor_details['vcpu']
-        reserved_rs_dict['reserved_vmem'] = flavor_details['vmem']
-        reserved_rs_dict['reserved_vnfs'] = rsv['number_vnfs']
-        reserved_rs_dict['reserved_vdisk'] = flavor_details['vdisk']
-        # TODO: this field should be moved to cinder-storage due to recent change between nova and cinder related to "vdisk"
-
-        print " Detected that number of vnfs within reservation is: 1 , Reserved COMPUTE resources accordingly is: %s" % reserved_rs_dict
-        return reserved_rs_dict
-
-    elif number_vnfs > 1:
-        for key in flavor_details:
-            flavor_details[key] *= int(number_vnfs)
-        reserved_rs_dict['reserved_vcpus'] = flavor_details['vcpu']
-        reserved_rs_dict['reserved_vmem'] = flavor_details['vmem']
-        reserved_rs_dict['reserved_vdisk'] = flavor_details['vdisk']
-
-        print " Detected that number of vnfs within reservation is greater than 1 (number of vnfs = %s), " \
-              "Reserved COMPUTE resources accordingly is: %s" % (number_vnfs, reserved_rs_dict)
-        return reserved_rs_dict
+    # get flavour info from flavour_info table
+    result, content = nfvodb.get_table_by_uuid_name("flavour_info", vnfd_flavor_id, error_item_text=None, allow_serveral=False)
+    if result <= 0:
+        nlog.error("Error : Can't get flavour_info table")
+        return False
     else:
-        print "Number of vnfs should be equal or greater than 1 or it is not in correct format."
+        resources = collections.defaultdict(dict)
+        resources['vcpus'] = content['numVirCpu']
+        resources['memmory'] = content['vMemory']
+        resources['gigabytes'] = content['storageSize']
+        return resources
 
+# get number of vnfs in a reservation dict
+# return a dict of reserved quota  after calculating with below formula:
+# reserved = number of vnfs * flavor_detail
+def quota_reserved_from_flavour_info_table(nfvodb, vnfd_flavor_id, number_vnfs):
+    '''
+    get reserved resource for instantiating reservation
+    :param vnfd_flavor_id: flavour id
+    :param number_vnfs: number of vnfs in a reservation
+    :return: reserved resources (dict)
+    '''
+
+    # get flavour info from flavour_info table
+    resources = load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
+    if number_vnfs > 0:
+        for key, val in resources.items():
+            val *= int(number_vnfs)
+            reserved[key] = val
+        nlog.info("SUCCESS: Loading reserved based on flavour id '%s',  reserved = %s", vnfd_flavor_id, reserved)
+        return reserved
+    else:
+        nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
+        return False
+
+def quota_allocated_from_flavour_info_table(nfvodb, vnfd_flavor_id):
+    '''
+    get allocated resources that required when NVFNO send resource allocation message to VIM
+    :param nfvodb:
+    :param vnfd_flavor_id: flavour id which is used when NVFNO send resource allocation message to VIM
+    :return: allocated dict: resource allocation
+    '''
+
+    # get flavour info from flavour_info table
+    allocated = load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id )
+
+    return allocated
 
 def go_main():
     return 0
 
 if __name__ == "__main__":
 
-    try:
-        nfvodb = resource_db()
-        if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
-            print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
-            exit(-1)
-        get_quotas_for_project(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5')
-        # update ={'in_use': 3}
-        # update_resource_usage_by_name(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5', resource='vnfs', actual_usage= 3)
+    data = {'reservation_id': '22222',
+            'label': 'test4',
+            'host_id': "12212817268DJKHSAJD",
+            'host_name': 'hai_compute',
+            'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
+            'user_name': 'admin',
+            'tenant_id': '4a766494021447c7905b81adae050a97',
+            'tenant_name': 'demo',
+            'start_time': '2016-05-23 18:04:00',
+            'end_time': '2016-05-23 18:09:00',
+            'flavor_id': 1,
+            'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
+            'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
+            'number_vnfs': 2,
+            'ns_id': 'ffbc3c72aa9f44769f3430093c59c457',
+            'status': 'ACTIVE',
+            'summary': 'reservation testing'
+            }
 
-    except (KeyboardInterrupt, SystemExit):
-        print 'Exiting Resource Management'
+    flavor_details = {'vcpus': 1, 'memory': 512, 'gigabytes': 1}
+    # test get reserved quota from flavour
+    reserved = quota_reserved_by_flavor_vnfcount(data)
+    print reserved
+
+
+    #
+    # try:
+    #     nfvodb = resource_db()
+    #     if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
+    #         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
+    #         exit(-1)
+    #     # get_quotas_for_project(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5')
+    #     # update ={'in_use': 3}
+    #     # update_resource_usage_by_name(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5', resource='vnfs', actual_usage= 3)
+    #
+    # except (KeyboardInterrupt, SystemExit):
+    #     print 'Exiting Resource Management'

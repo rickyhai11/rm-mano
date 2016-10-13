@@ -5,10 +5,7 @@ import six
 from sh_layer.common import consts
 from sh_layer.common import exceptions
 from sh_layer.rm_monitor.sh_rm_monitoring import *
-
-
-def get_import_path(cls):
-    return cls.__module__ + "." + cls.__name__
+from sh_layer.global_info import *
 
 
 # Returns a iterator of tuples containing batch_size number of objects in each
@@ -109,19 +106,19 @@ def load_flavors_from_vim(flavor_id):
     nova_client = get_nova_client('admin')
     flavor_list = nova_client.flavors.list(detailed=True)
     flavor_details = {}
+
     for flavor in flavor_list:
         if int(flavor.id) == int(flavor_id):
-            flavor_details['name'] = flavor.name
-            flavor_details['uuid'] = flavor.id
+            # flavor_details['name'] = flavor.name
+            # flavor_details['uuid'] = flavor.id
             flavor_details['vcpus'] = flavor.vcpus
             flavor_details['memory'] = flavor.ram
             flavor_details['gigabytes'] = flavor.disk
-            print flavor_details
             return flavor_details
-
         else:
             print "flavor %s is not existing in VIM (Openstack)" % flavor_id
             return False
+
 
 def build_db_quota_limit(quotas):
         '''
