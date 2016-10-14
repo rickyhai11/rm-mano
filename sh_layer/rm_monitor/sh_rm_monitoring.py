@@ -42,7 +42,7 @@ _debug = False
 os_url = 'http://116.89.184.94:35357/v2.0'
 
 
-#Static flavors list
+# Static flavors list
 flavorListDefault = [
     'm1.tiny',
     'm1.small',
@@ -184,15 +184,12 @@ def get_vnfs_details(p_nova_client):
     cnt_floatip                 = len(floatIpList)
     cnt_floatip_disassociated   = 0
 
-
     for inst in instanceList:
         t_inst_flav = inst.flavor['id']
 
         flavor = p_nova_client.flavors.get(t_inst_flav)
         t_inst_vcpu = flavor.vcpus
         t_inst_ram  = flavor.ram
-        # print "ram for created instance"
-        # print t_inst_ram
         t_inst_disk = flavor.disk
         t_inst_ephemeral = flavor.ephemeral
 
@@ -211,16 +208,16 @@ def get_vnfs_details(p_nova_client):
             cnt_floatip_disassociated = cnt_floatip_disassociated + 1
 
     summary = {}
-    summary['vnf_in_use'] = cnt_instances
-    summary['vnf_active'] = cnt_instances_active
-    summary['vcpu_in_use']   = cnt_vcpu
-    summary['vcpu_active'] = cnt_vcpu_active
+    summary['vnf_in_use']             = cnt_instances
+    summary['vnf_active']             = cnt_instances_active
+    summary['vcpu_in_use']            = cnt_vcpu
+    summary['vcpu_active']            = cnt_vcpu_active
 
-    summary['ram_in_use']    = cnt_ram
-    summary['ram_active'] = cnt_ram_active
-    summary['disk_in_use']   = cnt_disk + cnt_ephemeral
-    # summary['total_ephemeral'] = cnt_ephemeral # TODO (rickyhai) separate later when needed
-    summary['floatingip_in_use'] = cnt_floatip # allocated already
+    summary['ram_in_use']             = cnt_ram
+    summary['ram_active']             = cnt_ram_active
+    summary['disk_in_use']            = cnt_disk + cnt_ephemeral
+    # summary['total_ephemeral']      = cnt_ephemeral # TODO (rickyhai) separate later when needed
+    summary['floatingip_in_use']      = cnt_floatip # allocated already
     summary['floatingip_disassocate'] = cnt_floatip_disassociated
 
     return summary
@@ -433,8 +430,7 @@ def _estimate_total_ip(p_neutron_client):
             ips_number -= 1
         ips_number -= 2
         total_ip += ips_number
-    #print "total number of floating IP: %d " % total_ip
-    # print total_ip
+    # print "total number of floating IP: %d " % total_ip
     return total_ip
 
 
@@ -455,8 +451,7 @@ def get_volume_details(p_cinder_client):
         total_volume_snapshots_provisioned = total_volume_snapshots_cnt + snapshot.size
         # (snapshot.size * 1024 * 1024 * 1024)
 
-
-    summary = {}
+    summary={}
     summary['vols_count'] = len(volumelist)
     summary['vols_size_in_use'] = total_provisioned
     summary['snapshots_count'] = len(snapshotlist)
@@ -663,26 +658,22 @@ def sync_resource_usage_all_tenants():
 
 
         else :
-            # Un_used code---this part of code has been move to get_users_per_tenant_details()
 
             # get keystone client from get_keystone(p_tenant_name) function which have 'power'
             # to fully access keystone functions in lib
             t_keystone = get_keystone(tenant.name)
             t_users_cnt = len(t_keystone.tenants.list_users(tenant.id))
             t_users_list = t_keystone.tenants.list_users(tenant.id)
-            # print " user list"
-            # print t_users_list
 
             nova = get_nova_client(tenant.name)
             cinder = get_cinder_client(tenant.name)
-            swift = get_swift_client(tenant.name)
+            # swift = get_swift_client(tenant.name)
             neutron = get_neutron_client(tenant.name)
 
             compute_summary = get_vnfs_details(nova)
             storage_summary = get_volume_details(cinder)
             # object_summary  = get_object_details(swift)
             neutron_summary = get_networks_details(neutron)
-            # print neutron_summary
 
             t_tenant_name               = tenant.name
             t_users_cnt                 = t_users_cnt

@@ -222,11 +222,8 @@ def quota_destroy_by_project(*args, **kwargs):
     quota_destroy_all_by_project(only_quotas=True, *args, **kwargs)
 
 
-# implement quota check, quota calculation,
+# implement quota check, quota calculation
 ########################################################
-
-
-
 
 # check availability for resource(s) in a given project
 def available_resource_check_for_project(nfvodb, values, project_id=None):

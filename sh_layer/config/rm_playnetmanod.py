@@ -10,7 +10,7 @@ global global_config
 global_config = {'db_host': '116.89.184.43',
                   'db_user': 'root',
                   'db_passwd': '',
-                  'db_name': 'mano_db'
+                  'db_name': 'rm_mano_v1'
                  }
 global data
 data = {'reservation_id': '5555',
