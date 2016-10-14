@@ -592,6 +592,8 @@ class resource_db(utils_db):
     #         return result[0]
 
     # update a specific resource usage in a given project/tenant by name + using particular value as input data
+    # This function is invoked for handle api request in case user would like to update
+    # a specific resource usage intentionally from explicit project
     def update_resource_usage_by_name_for_tenant(self, tenant_id, resource, in_use, reserved,
                                                  until_refresh=False):
         '''
@@ -603,7 +605,7 @@ class resource_db(utils_db):
         :param until_refresh: False or True: resource need to be refreshed/synced or not
         :return:
         '''
-        # actual resource usage could be (1) or (2):
+        # use cases (1) or (2):
         # (1) to update DB after manually calculating resource usage ( with per resource request)
         # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
         #
@@ -626,12 +628,13 @@ class resource_db(utils_db):
             where_info = {'project_id': tenant_id, 'resource': resource}
             update_usage = {'in_use': in_use, 'reserved': reserved, 'until_refresh': until_refresh}
             _, result = self.update_rows('resource_usage_rm', UPDATE=update_usage, WHERE=where_info, log=True)
-            if result > 0:
+
+            # result[0] = number of rows have been updated
+            if result[0] > 0:
                 nlog.info("Success : Update resource information into resource_usage_rm table")
-                # result[0] = number of rows have been updated
                 return nb_rows
             else:
-                nlog.error("Error : Failed to update resource usage (resource =%s, project ID =%s actual resource usage = %s)",
+                nlog.error("Error: Failed to update resource usage (resource =%s, project ID =%s actual resource usage = %s)",
                            resource, tenant_id, update_usage)
                 # return False, None
 
@@ -642,6 +645,182 @@ class resource_db(utils_db):
             nlog.error("ERROR: Failed to check presence of a specific resource (resource name: '%s' and project ID '%s') "
                           "from resource usage table", resource, tenant_id)
             # return False, None
+
+    ######################################################
+    # internal function which is called internally for handling resource management operations
+    # Resource usage calculation
+    # update a specific resource usage in a given project by name + using particular value as input data
+    #
+
+    def in_use_record_update(self, tenant_id, resource, in_use, until_refresh, action):
+        '''
+        to update 'in_use' value for a specific resource in resource usage table against action = (ADD, UPDATE, DELETE)
+        if action == ADD or UPDATE --> increase in_use
+        if action == DELETE --> decrease in_use
+        :param tenant_id:
+        :param resource: name
+        :param in_use: value
+        :param action: (ADD, UPDATE, DELETE) --> to decide whether in_use resource is increased or decreased
+        :param until_refresh: False or True: resource need to be refreshed/synced or not
+        by default, at this phase, set False for until_refresh
+        :return:
+        '''
+
+        # First checks that the state of records is what the thread previously knew to exist.
+        # The UPDATE statement will include a WHERE condition that will ensure that the rows are only updated
+        # in the table IF the current row values are what the thread thought they were
+        # when previously reading the rows with the SELECT statement. The thread will check the number of rows
+        # affected by the UPDATE statement.
+        # If the number of rows affected is 0, then a randomized exponential backoff loop will be hit
+        # and the process of reading and
+        # then UPDATE ing with the WHERE condition will repeat until a pre-defined number of tries has been attempted.
+
+        # use cases (1) or (2):
+        # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
+        # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
+        #
+        # First get current resource usage and
+        # check if there are any duplicate rows with corresponding project id and resource in db
+        nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
+                                                             uuid_name=resource, error_item_text=None,
+                                                             allow_serveral=True)
+
+        # if there is no record in db regarding to that resource and tenant
+        if nb_rows == 0:
+            # passing number of row = 0 to trigger create new record for correspond resource
+            print ("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
+                       "in resource usage table" % (resource, tenant_id))
+            nlog.error("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
+                          "in resource usage table", resource, tenant_id)
+            return False, nb_rows
+
+        # if number of rows > 1 --> row is already present and trigger update operation
+        elif nb_rows == 1:
+            # define max_attempts and number_attempts
+            max_attempts = 10
+            num_attempts = 0
+
+            # get current usage
+            current_in_use = usage['in_use']
+
+            while num_attempts < max_attempts:
+                # resource calculation (increased or decreased) that depend on action value (ADD or DELETE or UPDATE)
+                updated_in_use = resource_calculation(current_value=current_in_use,acquired_value=in_use, action=action)
+
+                # using previous queried 'in_use' value as condition for WHERE
+                where_info = {'project_id': tenant_id, 'resource': resource, 'in_use': current_in_use}
+                update_usage = {'in_use': updated_in_use, 'until_refresh': until_refresh}
+
+                _, result = self.update_rows('resource_usage_rm', UPDATE=update_usage, WHERE=where_info, log=True)
+
+                # result[0] = number of rows have been updated
+                if result[0] > 0:
+                    nlog.info("Success : Update resource usage to resource_usage_rm table")
+                    break
+                # increase number attempts
+                num_attempts += 1
+
+                # get current usage record again
+                nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
+                                                             uuid_name=resource, error_item_text=None,
+                                                             allow_serveral=True)
+                # update current in_use resource again
+                current_in_use = usage['in_use']
+
+            return True, current_in_use
+
+        # if number of rows is not integer
+        else:
+            print ("ERROR: Failed to update specific resource usage record (resource name: '%s' and project ID '%s')"
+                        % (resource, tenant_id))
+            nlog.error("ERROR: Failed to check presence of a specific resource (resource name: '%s' and projectID '%s')"
+                        ,resource, tenant_id)
+            return False, None
+
+    def reserved_record_update(self, tenant_id, resource, reserved, until_refresh, action):
+        '''
+        to update 'reserved' value for a specific resource in resource usage table against action = (ADD, UPDATE, DELETE)
+        if action == ADD or UPDATE --> increase reserved
+        if action == DELETE --> decrease reserved
+        :param tenant_id:
+        :param resource: name
+        :param reserved: value
+        :param action: (ADD, UPDATE, DELETE) --> to decide whether reserved resource is increased or decreased
+        :param until_refresh: False or True: resource need to be refreshed/synced or not
+        by default, at this phase, set False for until_refresh
+        :return:
+        '''
+
+        # First checks that the state of records is what the thread previously knew to exist.
+        # The UPDATE statement will include a WHERE condition that will ensure that the rows are only updated
+        # in the table IF the current row values are what the thread thought they were
+        # when previously reading the rows with the SELECT statement. The thread will check the number of rows
+        # affected by the UPDATE statement.
+        # If the number of rows affected is 0, then a randomized exponential backoff loop will be hit
+        # and the process of reading and
+        # then UPDATE ing with the WHERE condition will repeat until a pre-defined number of tries has been attempted.
+
+        # use cases (1) or (2):
+        # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
+        # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
+        #
+        # First get current resource usage and
+        # check if there are any duplicate rows with corresponding project id and resource in db
+        nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
+                                                             uuid_name=resource, error_item_text=None,
+                                                             allow_serveral=True)
+
+        # if there is no record in db regarding to that resource and tenant
+        if nb_rows == 0:
+            # passing number of row = 0 to trigger create new record for correspond resource
+            print ("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
+                       "in resource usage table" % (resource, tenant_id))
+            nlog.error("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
+                          "in resource usage table", resource, tenant_id)
+            return False, nb_rows
+
+        # if number of rows > 1 --> row is already present and trigger update operation
+        elif nb_rows == 1:
+            # define max_attempts and number_attempts
+            max_attempts = 10
+            num_attempts = 0
+
+            # get current usage
+            current_reserved = usage['reserved']
+
+            while num_attempts < max_attempts:
+                # resource calculation (increased or decreased) that depend on action value (ADD or DELETE or UPDATE)
+                updated_in_use = resource_calculation(current_value=current_reserved,acquired_value=reserved, action=action)
+
+                # using previous queried 'in_use' value as condition for WHERE
+                where_info = {'project_id': tenant_id, 'resource': resource, 'in_use': current_reserved}
+                update_usage = {'reserved': updated_in_use, 'until_refresh': until_refresh}
+
+                _, result = self.update_rows('resource_usage_rm', UPDATE=update_usage, WHERE=where_info, log=True)
+
+                # result[0] = number of rows have been updated
+                if result[0] > 0:
+                    nlog.info("Success : Update resource usage to resource_usage_rm table")
+                    break
+                # increase number attempts
+                num_attempts += 1
+
+                # get current usage record again
+                nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
+                                                             uuid_name=resource, error_item_text=None,
+                                                             allow_serveral=True)
+                # update current in_use resource again
+                current_reserved = usage['reserved']
+
+            return True, current_reserved
+
+        # if number of rows is not integer
+        else:
+            print ("ERROR: Failed to update specific resource usage record (resource name: '%s' and project ID '%s')"
+                        % (resource, tenant_id))
+            nlog.error("ERROR: Failed to check presence of a specific resource (resource name: '%s' and projectID '%s')"
+                        ,resource, tenant_id)
+            return False, None
 
     # get resource usage by uuid or resource name (default is uuid if no --> name) for all existing tenants/projects
     def get_resource_usage_by_uuid_name(self, uuid_name):

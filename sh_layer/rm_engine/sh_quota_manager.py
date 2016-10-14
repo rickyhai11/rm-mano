@@ -221,22 +221,12 @@ def quota_destroy_by_project(*args, **kwargs):
     """
     quota_destroy_all_by_project(only_quotas=True, *args, **kwargs)
 
+
 # implement quota check, quota calculation,
 ########################################################
 
-def increase_resource_usage(nfvodb, project_id, values):
-    # get  current resource usage ()
-    #
-    # calculate base on values
-    #
-    # update to db
-    # consider which case for reservation ---> update reserved OR allocated --> in_use
-    # by checking values if 'in_use' or 'reserved' is present
 
-    return
-def decrease_resource_usage(nfvodb, project_id, values):
 
-    return
 
 # check availability for resource(s) in a given project
 def available_resource_check_for_project(nfvodb, values, project_id=None):
@@ -437,9 +427,6 @@ class DbQuotaDriver(object):
         """
 
         db_api.reservation_expire(context)
-
-
-
 
 def quota_reserve(nfvodb, resources, quotas, deltas, expire,
                   until_refresh, max_age, project_id=None):

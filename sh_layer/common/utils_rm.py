@@ -121,22 +121,51 @@ def load_flavors_from_vim(flavor_id):
 
 
 def build_db_quota_limit(quotas):
-        '''
-        build quota limit dict to store in DB
-        :param quotas:
-        :return:
-        '''
-        # validate input quotas
-        validate_quota_limits(payload=quotas)
-        #
-        quota = collections.defaultdict(dict)
-        for resource, limit in quotas.iteritems():
-            quota[resource] = collections.defaultdict(dict)
-            quota[resource]['resource'] = resource
-            quota[resource]['hard_limit'] = limit
-            quota[resource]['allocated'] = 0
-        print quota
-        return quota
+    '''
+    build quota limit dict to store in DB
+    :param quotas:
+    :return:
+    '''
+    # validate input quotas
+    validate_quota_limits(payload=quotas)
+
+    quota = collections.defaultdict(dict)
+    for resource, limit in quotas.iteritems():
+        quota[resource] = collections.defaultdict(dict)
+        quota[resource]['resource'] = resource
+        quota[resource]['hard_limit'] = limit
+        quota[resource]['allocated'] = 0
+    print quota
+    return quota
+
+def build_db_usage_limit(resources, label_update):
+    '''
+    build resource usage dict to store in DB
+    :param resources: dict {'cpus': 10, 'memory': 1024}
+    :param label_update: enum (in_use, reserved) this fie
+    :return:usage (dict)
+    {'vcpus' : {'resource': 'vcpus', 'in_use': 10}}
+    OR
+    {'vcpus' : {'resource': 'vcpus', 'reserved': 10}}
+    '''
+    # TODO (ricky) not tested yet
+    # validate input resources
+    validate_quota_limits(payload=resources)
+
+    usage = collections.defaultdict(dict)
+    for resource, limit in resources.iteritems():
+        usage[resource] = collections.defaultdict(dict)
+        usage[resource]['resource'] = resource
+        # if label == in_use, convert resource dict to usage dict that included 'in_use' field
+        # update 'in_use' field only
+        if label_update == 'in_use':
+            usage[resource]['in_use'] = limit
+        # if label == reserved, convert resource dict to usage dict that included 'reserved' field
+        # update 'reserved' field only
+        if label_update == 'reserved':
+            usage[resource]['reserved'] = limit
+    print usage
+    return usage
 
 # convert quotas limit from db format to output format that will be response to api request
 # input quotas (db format):
@@ -173,3 +202,22 @@ def build_output_resource_usage(db_resource_usage):
     out_usage[resource]['until_refresh'] = db_resource_usage['until_refresh']
 
     return out_usage
+
+# to calculate resource whether resource usage is increased or decreased
+def resource_calculation(current_value, acquired_value, action):
+    '''
+    to calculate resource whether resource usage is increased or decreased
+    :param current_value: current value that is being stored in db
+    :param acquired_value: required resource value that needed to be increased or decreased
+    :param action: (string) (ADD,UPDATE,DELETE)
+    :return:
+    '''
+    if action == 'ADD' or action == 'UPDATE':
+        cal_usage = current_value + acquired_value
+        return cal_usage
+    elif action == 'DELETE':
+        cal_usage = current_value - acquired_value
+        return cal_usage
+    else:
+        nlog.error("ERROR: utils_rm.resource_calculation() - Failed to calculate resource usage")
+        return False, None
