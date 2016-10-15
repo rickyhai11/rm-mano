@@ -3,12 +3,14 @@
 
 import ast
 import collections
+import json
 import os
 import re
 import sys
 
 import cinderclient.v1.client as cinderclient
 import keystoneclient.v2_0.client as keystoneclient
+import six
 import swiftclient.client as swiftclient
 from keystoneauth1 import session
 from keystoneauth1.identity import v2
@@ -29,7 +31,7 @@ global global_config
 global_config = {'db_host': '116.89.184.43',
                   'db_user': 'root',
                   'db_passwd': '',
-                  'db_name': 'rm_mano_v1'
+                  'db_name': 'mano_db'
                  }
 
 os_username = 'admin'
@@ -53,7 +55,7 @@ flavorListDefault = [
 ]
 
 # --
-# get credentials from open-stack services
+# get credentials from openstack services
 #
 def load_creds_env():
     global os_username, os_password, os_auth_url
@@ -71,7 +73,7 @@ def get_keystone_creds():
     d['username'] = os_username
     d['password'] = os_password
     d['auth_url'] = os_auth_url
-   # d['tenant_name'] = os.environ['OS_TENANT_NAME']
+ #   d['tenant_name'] = os.environ['OS_TENANT_NAME']
     return d
 
 
@@ -132,6 +134,10 @@ def get_keystone(p_tenant_id):
 #     print keystone
 #     print keystone.tenants.list()
 #     return keystone
+
+
+def get_swift_client(p_tenant_id):
+    return swiftclient.Connection(authurl=os_auth_url, user=os_username, key=os_password, tenant_id=p_tenant_id, auth_version='2')
 
 
 # --
@@ -246,8 +252,9 @@ def get_networks_details(p_neutron_client):
                                                'provider:network_type']}
     t_networks_attributes = p_neutron_client.list_networks(**kwargs_networks)['networks']
 
+
     # get a dictionary of list networks in a tenant with all attributes
-    # t_networks_dict = p_neutron_client.list_networks()['networks']
+    #t_networks_dict = p_neutron_client.list_networks()['networks']
     for t_network in t_networks_attributes:
         if t_network['status'] =='ACTIVE':
             t_networks_active = t_networks_active + 1
@@ -270,7 +277,7 @@ def get_networks_details(p_neutron_client):
     t_ports_attributes = p_neutron_client.list_ports(**kwargs_port)['ports']
 
     # get list of all ports in a tenant (dict format each element)
-    # t_ports_dict = p_neutron_client.list_ports()['ports']
+    #t_ports_dict = p_neutron_client.list_ports()['ports']
     for t_port in t_ports_attributes:
         if t_port['status'] == 'ACTIVE':
             t_ports_active = t_ports_active + 1
@@ -320,7 +327,7 @@ def get_networks_details(p_neutron_client):
     t_lbaas_vips_total = 0
     t_lbaas_pools_total = 0
 
-    # filter to get floating id and status of corresponding floating id in a dict format
+    # filter to get floating id and status of coresponding floating id in a dict format
     kwargs_floatings = {'retrieve_all': True, 'fields': ['id', 'tenant_id', 'floating_ip_address', 'floating_network_id', 'status', 'router_id', 'port_id', 'fixed_ip_address']}
 
     # obtain list of floatingip id and corresponding status of floatingip
@@ -453,6 +460,20 @@ def get_volume_details(p_cinder_client):
 
 
 # --
+# get_object_details()
+# Returns details of object utilization for a tenant
+# TODO undo this one when code get stable
+# def get_object_details(p_swift_client):
+#     summary = {}
+#     t_object_store = p_swift_client.get_account()
+#
+#     summary['total_container_count']     = int(t_object_store[0]['x-account-container-count'])
+#     summary['total_object_count']        = int(t_object_store[0]['x-account-object-count'])
+#     summary['total_object_storage_used'] = float("{0:.2f}".format(int(t_object_store[0]['x-account-bytes-used']) / (1024*1024*1024)))
+#     return summary
+
+
+# --
 # sync_flavor_usage_all_tenants()
 # Returns dict of dict for all tenants
 # This is of the form
@@ -528,7 +549,7 @@ def sync_flavor_usage_all_tenants():
 
 # --
 # sync_resource_usage_all_tenants()
-# Returns a (k,v) dict where k = tenant name and v is dict of pulled values
+# Returns a (k,v) dict where k = tenantname and v is dict of pulled values
 #
 def sync_resource_usage_all_tenants():
     '''
@@ -556,6 +577,9 @@ def sync_resource_usage_all_tenants():
     aggr_persist_provisioned_vol_value  = 0
     aggr_persist_snapshot_count  = 0
     aggr_persist_provisoned_snapshots_value  = 0
+    # aggr_container_count    = 0
+    # aggr_object_count = 0
+    # aggr_object_storage_used = 0
 
     aggr_networks_prov = 0
     aggr_networks_active = 0
@@ -581,6 +605,7 @@ def sync_resource_usage_all_tenants():
     aggr_lbaas_vips_prov = 0
     aggr_lbaas_pools_prov = 0
 
+
     # Will be returning an aggregate at the end .. so lets use OrderedDict()
     d = collections.OrderedDict()
 
@@ -588,45 +613,48 @@ def sync_resource_usage_all_tenants():
 
         # Skip disabled tenants
         if tenant.enabled == False:
-            t_tenant_name                          = tenant.name
-            t_users_cnt                            = 'disabled'
-            t_users_list                           = 'disabled'
-            t_instances                            = 'disabled'
-            t_instances_active                     = 'disabled'
-            t_vcpu                                 = 'disabled'
-            t_vcpu_active                          = 'disabled'
-            t_ram                                  = 'disabled'
-            t_ram_active                           = 'disabled'
-            t_disk_ephemeral                       = 'disabled'
-            t_float_allocated                      = 'disabled'
-            t_float_disassociated                  = 'disabled'
-            t_persist_volcount                     = 'disabled'
-            t_persist_provisioned_vol_value        = 'disabled'
-            t_persist_snapshot_count               = 'disabled'
+            t_tenant_name           = tenant.name
+            t_users_cnt             = 'disabled'
+            t_users_list            = 'disabled'
+            t_instances             = 'disabled'
+            t_instances_active      = 'disabled'
+            t_vcpu                  = 'disabled'
+            t_vcpu_active           = 'disabled'
+            t_ram                   = 'disabled'
+            t_ram_active            = 'disabled'
+            t_disk_ephemeral        = 'disabled'
+            t_float_allocated       = 'disabled'
+            t_float_disassociated   = 'disabled'
+            t_persist_volcount      = 'disabled'
+            t_persist_provisioned_vol_value         = 'disabled'
+            t_persist_snapshot_count                = 'disabled'
             t_persist_provisioned_snapshot_value   = 'disabled'
-            t_networks_total                       = 'disabled'
-            t_networks_active                      = 'disabled'
-            t_networks_inactive                    = 'disabled'
-            t_networks_attributes                  = 'disabled'
-            t_ports_total                          = 'disabled'
-            t_ports_active                         = 'disabled'
-            t_ports_inactive                       = 'disabled'
-            t_ports_attributes                     = 'disabled'
-            t_floatingips_total                    = 'disabled'
-            t_floatingips_usage                    = 'disabled'
-            t_floatingips_available                = 'disabled'
-            t_floatingips_active                   = 'disabled'
-            t_floatingips_inactive                 = 'disabled'
-            t_floatingips_attributes               = 'disabled'
-            t_routers_total                        = 'disabled'
-            t_routers_active                       = 'disabled'
-            t_routers_inactive                     = 'disabled'
-            t_routers_attributes                   = 'disabled'
-            t_subnets_total                        = 'disabled'
-            t_subnets_attributes                   = 'disabled'
-            t_snat_external_gateway                = 'disabled'
-            t_lbaas_vips_total                     = 'disabled'
-            t_lbaas_pools_total                    = 'disabled'
+            # t_container_count       = 'disabled'
+            # t_object_count          = 'disabled'
+            # t_object_storage_used   = 'disabled'
+            t_networks_total        = 'disabled'
+            t_networks_active       = 'disabled'
+            t_networks_inactive     = 'disabled'
+            t_networks_attributes   = 'disabled'
+            t_ports_total           = 'disabled'
+            t_ports_active          = 'disabled'
+            t_ports_inactive        = 'disabled'
+            t_ports_attributes      = 'disabled'
+            t_floatingips_total     = 'disabled'
+            t_floatingips_usage     = 'disabled'
+            t_floatingips_available = 'disabled'
+            t_floatingips_active    = 'disabled'
+            t_floatingips_inactive  = 'disabled'
+            t_floatingips_attributes= 'disabled'
+            t_routers_total         = 'disabled'
+            t_routers_active        = 'disabled'
+            t_routers_inactive      = 'disabled'
+            t_routers_attributes    = 'disabled'
+            t_subnets_total         = 'disabled'
+            t_subnets_attributes    = 'disabled'
+            t_snat_external_gateway = 'disabled'
+            t_lbaas_vips_total      = 'disabled'
+            t_lbaas_pools_total     = 'disabled'
 
 
         else :
@@ -654,8 +682,8 @@ def sync_resource_usage_all_tenants():
             t_instances_active          = compute_summary['total_instances_active']
             t_vcpu                      = compute_summary['total_vcpu']
             t_vcpu_active               = compute_summary['total_vcpu_active']
-            t_ram                       = compute_summary['total_ram']  # / 1024
-            t_ram_active                = compute_summary['total_ram_active']  # / 1024
+            t_ram                       = compute_summary['total_ram'] #/ 1024
+            t_ram_active                = compute_summary['total_ram_active'] #/ 1024
             t_disk_ephemeral            = compute_summary['total_disk'] + compute_summary['total_ephemeral']
             t_float_allocated           = compute_summary['total_floatingip_allocated']
             t_float_disassociated       = compute_summary['total_floatingip_disassocated']
@@ -663,6 +691,9 @@ def sync_resource_usage_all_tenants():
             t_persist_provisioned_vol_value            = storage_summary['total_vols_provisioned_capacity']
             t_persist_snapshot_count                   = storage_summary['total_snapshots_count']
             t_persist_provisioned_snapshot_value       = storage_summary['total_snapshots_provisioned_capacity']
+            # t_container_count           = object_summary['total_container_count']
+            # t_object_count              = object_summary['total_object_count']
+            # t_object_storage_used       = object_summary['total_object_storage_used']
             t_networks_total            = neutron_summary['total_networks']
             t_networks_active           = neutron_summary['total_networks_active']
             t_networks_inactive         = neutron_summary['total_networks_inactive']
@@ -703,6 +734,8 @@ def sync_resource_usage_all_tenants():
             aggr_persist_provisioned_vol_value         = aggr_persist_provisioned_vol_value + t_persist_provisioned_vol_value
             aggr_persist_snapshot_count                = aggr_persist_snapshot_count + t_persist_snapshot_count
             aggr_persist_provisoned_snapshots_value    = aggr_persist_provisoned_snapshots_value + t_persist_provisioned_snapshot_value
+            # aggr_object_count           = aggr_object_count + t_object_count
+            # aggr_object_storage_used    = aggr_object_storage_used + t_object_storage_used
 
             aggr_networks_prov          = aggr_networks_prov + t_networks_total
             aggr_networks_active        = aggr_networks_active + t_networks_active
@@ -730,6 +763,7 @@ def sync_resource_usage_all_tenants():
 
         # Inst_Prov,Inst_Active,VCPU_Prov,VCPU_Active,RAM_Prov,RAM_Active,Disk_Prov_GB,FloatIP_Alloc,FloatIP_Disassoc,
         # Vols_Prov,Vols_Prov_GB,Object_Containers,Object_Count,Object_Storage_Used_GB"
+        # k,v where k becomes header
         d[t_tenant_name] = {
             'Users_count'           : t_users_cnt,
             'Users_list'            : t_users_list,
@@ -746,6 +780,9 @@ def sync_resource_usage_all_tenants():
             'Vols_Prov_GB'          : t_persist_provisioned_vol_value,
             'Snapshot_Prov'         : t_persist_snapshot_count,
             'Snapshot_Prov_GB'      : t_persist_provisioned_snapshot_value,
+            # 'Object_Containers'     : t_container_count,
+            # 'Object_Count'          : t_object_count,
+            # 'Object_Storage_Used_GB': t_object_storage_used,
             'Networks_Prov'         : t_networks_total,
             'Networks_Active'       : t_networks_active,
             'Networks_Inactive'     : t_networks_inactive,
@@ -788,6 +825,9 @@ def sync_resource_usage_all_tenants():
             'Vols_Prov_GB'      : aggr_persist_provisioned_vol_value,
             'Snapshot_Prov'         : aggr_persist_snapshot_count,
             'Snapshot_Prov_GB'      : aggr_persist_provisoned_snapshots_value,
+            # 'Object_Containers'   : aggr_container_count,
+            # 'Object_Count'        : aggr_object_count,
+            # 'Object_Storage_Used_GB': aggr_object_storage_used,
             'Networks_Prov'         : aggr_networks_prov,
             'Networks_Active'       : aggr_networks_active,
             'Networks_Inactive'     : aggr_networks_inactive,
@@ -819,12 +859,21 @@ def sync_resource_usage_for_tenant(tenant_id):
     :param tenant_id:
     :return: resource usage (dict)
     '''
+
+    # get keystone client from get_keystone(p_tenant_name) function which have 'power'
+    # to fully access keystone functions in lib
+    # t_keystone = get_keystone(tenant_id)
+    # t_users_cnt = len(t_keystone.tenants.list_users(tenant_id))
+    # t_users_list = t_keystone.tenants.list_users(tenant_id)
+
     nova = get_nova_client(tenant_id)
     cinder = get_cinder_client(tenant_id)
+    # swift = get_swift_client(tenant_id)
     neutron = get_neutron_client(tenant_id)
 
     compute_summary = get_vnfs_details(nova)
     storage_summary = get_volume_details(cinder)
+    # object_summary  = get_object_details(swift)
     neutron_summary = get_networks_details(neutron)
 
     # resource_usage['nova'] = compute_summary
@@ -837,59 +886,82 @@ def sync_resource_usage_for_tenant(tenant_id):
         resource_usage[resource] = collections.defaultdict(dict)
         if resource == 'vcpus':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = compute_summary['vnf_in_use']
+            # resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
         if resource == 'vnfs':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = compute_summary['vcpu_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'memory':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = compute_summary['ram_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'floatingip_default':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = compute_summary['floatingip_in_use']
+            # resource_usage[resource]['reserved'] = 0
 
     for resource in CINDER_QUOTA_FIELDS:
         resource_usage[resource] = collections.defaultdict(dict)
         if resource == 'volumes':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = storage_summary['vols_size_in_use']
+            # resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
         if resource == 'snapshots':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = storage_summary['snapshots_size_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'gigabytes':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
-            resource_usage[resource]['in_use'] = compute_summary['disk_in_use']  # pickup from compute resources
-                                                                                 # (get_vnfs_detail() function)
+            resource_usage[resource]['in_use'] = compute_summary['disk_in_use'] # pickup from compute resources (get_vnfs_detail() function)
+            # resource_usage[resource]['reserved'] = 0
 
     for resource in NEUTRON_QUOTA_FIELDS:
         resource_usage[resource] = collections.defaultdict(dict)
         if resource == 'network':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = neutron_summary['networks_in_use']
+            # resource_usage[resource]['reserved'] = 0 # TODO (rickyhai) should we inlcude reserved field into resource usage call--> VIM ??
         if resource == 'subnet':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = neutron_summary['subnets_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'port':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = neutron_summary['ports_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'router':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = neutron_summary['routers_in_use']
+            # resource_usage[resource]['reserved'] = 0
         if resource == 'floatingip':
             resource_usage[resource]['project_id'] = tenant_id
+            # resource_usage[resource]['user_id'] = 0  # TODO (rickyhai) implement to get user_id here
             resource_usage[resource]['resource'] = resource
             resource_usage[resource]['in_use'] = neutron_summary['floatingips_in_use']
+            # resource_usage[resource]['reserved'] = 0
     return resource_usage
 
 # --
@@ -979,6 +1051,10 @@ def sync_hard_limits_all_tenants():
             # get Networks-tenant quotas
             # q[t_tenant_name] = {'quotas_networks': {'tenant_id': tenant.id,'tenant_name': tenant.name}}
             quotas_networks = neutron.show_quota(tenant_id=tenant.id)['quota']
+            # for quota_network in quotas_networks:
+            # for item in ('floatingip', 'health_monitor' ,'subnetpool',
+            #       'member', 'network', 'port', 'router',
+            #       'security_group', 'security_group_rule', 'subnet', 'rbac_policy','pool'):
             for item in ('subnet', 'network', 'floatingip', 'subnetpool', 'security_group_rule',
                   'security_group', 'router', 'rbac_policy',  'port'):
                 q[t_tenant_name]['quotas_networks'][item] = quotas_networks[item]
@@ -990,6 +1066,12 @@ def sync_hard_limits_all_tenants():
             # Quotas and limits Cinder
             #=====================================================================================================
             """Retrieves tenant quotas from cinder- Cinder API v2"""
+            # q[t_tenant_name] = {
+            #     'quotas_cinder': {'tenant_id': tenant.id, "tenant_name": tenant.name},
+            #     'limits_cinder': {'tenant_id': tenant.id,'tenant_name': tenant.name}
+            #     # 'volume': {'count': 0, 'byte': 0},
+            #     # 'volume_snapshots': {'count': 0, 'byte': 0}
+            # }
 
             # Get cinder-absolute limits for tenant
             try:
@@ -1001,6 +1083,7 @@ def sync_hard_limits_all_tenants():
                 #     limit_cinder.value = limit_cinder.value * 1024 * 1024 * 1024
                 q[t_tenant_name]['limits_cinder'][limit_cinder.name] = limit_cinder.value
             # print "Limits of cinder are: %s "% (q[t_tenant_name]['limits_cinder'])
+
 
             # get cinder-tenant quotas
             quotas_cinder = cinder.quotas.get(tenant_id=tenant.id, usage=True)
@@ -1059,15 +1142,18 @@ def build_dbformat_resource_usage_compute_all_tenants():
     limits_compute_list = []
 
     data = sync_hard_limits_all_tenants()
-    # resource utilization metrics for all tenants
+    #  resource utilization metrics for all tenants
     data_tenant_utilization = sync_resource_usage_all_tenants()
 
     for tenant in tenantlist:
         # dict contains upper letters
         limits_compute_orgi = data[tenant.name]['limits_compute']
 
+
         # convert all key of dict to lower letters
         limits_compute = dict((k.lower(), v) for k,v in limits_compute_orgi.iteritems())
+        # print " lower dict"
+        # print limits_compute
 
         # combine data from tenant utilization function to get needed format with full fields to store in DB
         tenant_compute_util = data_tenant_utilization[tenant.name]
@@ -1125,6 +1211,7 @@ def build_dbformat_resource_usage_compute_all_tenants():
         # total resources utilization for all used and reserved resources in a given tenant
         limits_compute['percentage_floatingips_total_util_by_users']       = 0
 
+
         limits_compute_list.append(limits_compute)
         print limits_compute_list
     return limits_compute_list
@@ -1151,6 +1238,7 @@ def build_dbformat_resource_usage_networks_all_tenants():
         tenant_networks_util = data_tenant_utilization[tenant.name]
         print tenant_networks_util['Networks_Prov']
         print quotas_network_utilization['network']
+
 
         # TODO need to re-consider how to calculate networks
         # networks meters after combination
@@ -1239,11 +1327,11 @@ def build_dbformat_resource_usage_storage_all_tenants():
     data_tenant_utilization = sync_resource_usage_all_tenants()
 
     for tenant in tenantlist:
-        # limits storage dict contains upper letters that need to be convert to lower letter
-        # when storing in DB if it is used
+        # limits storage dict contains upper letters that need to be convert to lower letter when storing in DB if it is used
         # tenant_limits_storage_util = data[tenant.name]['limits_cinder'] # not used so far
         # usage quota storage for a given tenant
         tenant_quotas_storage_util = data[tenant.name]['quotas_cinder']
+        # print tenant_limits_storage_util
         print tenant_quotas_storage_util
 
         # data from tenant utilization function to get needed format with full fields to store in DB

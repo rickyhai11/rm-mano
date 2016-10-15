@@ -84,7 +84,7 @@ def delete_resource_usage(nfvodb, tenant_id):
     result = nfvodb.delete_resource_usage_for_tenant(tenant_id)
     return result
 
-# resource synchronization RM (NFVO)-VIM
+# resource usage synchronization RM from VIM --> NFVO db
 def sync_resource_usage(nfvodb, tenant_id):
     '''
     Sync actual resource usage from vim for recalculate resource usage  that is manually calculated at RM db
@@ -209,6 +209,48 @@ def get_specific_quota_by_project(nfvodb, project_id, resource):
     quota_out = build_output_quota_limit(quota)
     return result, quota_out
 
+# def get_project_quotas(nfvodb,resources, project_id, usages=True, parent_project_id=None):
+#     """Retrieve quotas for a project.
+#
+#     Given a list of resources, retrieve the quotas for the given
+#     project.
+#
+#     :param resources: A dictionary of the registered resources.
+#     :param project_id: The ID of the project to return quotas for.
+#     :param defaults: If True, the quota class value (or the
+#                      default value, if there is no value from the
+#                      quota class) will be reported if there is no
+#                      specific value for the resource.
+#     :param usages: If True, the current in_use, reserved and allocated
+#                    counts will also be returned.
+#     :param parent_project_id: The id of the current project's parent,
+#                               if any.
+#     """
+#     # TODO (ricky) need to be implement when nested quota projects is supported
+#     return
+#
+# def _get_quotas(nfvodb, resources, keys, has_sync, project_id=None,
+#                 parent_project_id=None):
+#     """A helper method which retrieves the quotas for specific resources.
+#
+#     This specific resource is identified by keys, and which apply to the
+#     current context.
+#
+#     :param nfvodb: db object
+#     :param resources: A dictionary of the registered resources.
+#     :param keys: A list of the desired quotas to retrieve.
+#     :param has_sync: If True, indicates that the resource must
+#                      have a sync attribute; if False, indicates
+#                      that the resource must NOT have a sync
+#                      attribute.
+#     :param project_id: Specify the project_id if current context
+#                        is admin and admin wants to impact on
+#                        common user's tenant.
+#     :param parent_project_id: The id of the current project's parent,
+#                               if any.
+#     """
+#     # TODO (ricky) need to be implement when nested quota projects is supported
+#     return
 
 def quota_destroy_all_by_project(nfvodb, tenant_id, only_quotas=False):
     # TODO (rickyhai) implement in next stage
@@ -317,6 +359,90 @@ def limit_check(nfvodb, values, project_id=None):
         nlog.error("ERROR: quotas exceed for the resources '%s'", overs)
         raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
 
+def allocated_resource_update(nfvodb, project_id, resource, allocated, action):
+    '''
+    when resource allocation change is made, then we need to update 'in_use' value for a specific resource
+    in resource usage table against action = (ADD, UPDATE, DELETE)
+    if action == ADD or UPDATE --> increase in_use
+    if action == DELETE --> decrease in_use
+    :param nfvodb: db object
+    :param tenant_id:
+    :param resource: name
+    :param in_use: value
+    :param action: (ADD, UPDATE, DELETE) --> to decide whether in_use (allocated) resource is increased or decreased
+    :return:
+    '''
+
+    return nfvodb.in_use_record_update(project_id=project_id, resource=resource, in_use=allocated, action=action)
+
+def reserved_resource_update(nfvodb, project_id, resource, reserved, action):
+    '''
+    when resource reservation change is made, then we need to update 'reserved' value for a specific resource
+    in resource usage table against action = (ADD, UPDATE, DELETE)
+    if action == ADD or UPDATE --> increase reserved
+    if action == DELETE --> decrease reserved
+    :param nfvodb: db object
+    :param tenant_id:
+    :param resource: name
+    :param reserved: value
+    :param action: (ADD, UPDATE, DELETE) --> to decide whether reserved resource is increased or decreased
+    :return:
+    '''
+
+    return nfvodb.reserved_record_update(project_id=project_id, resource=resource, reserved=reserved, action=action)
+
+def get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
+
+    # get flavour info from flavour_info table
+    result, content = nfvodb.get_table_by_uuid_name("flavour_info", vnfd_flavor_id, error_item_text=None, allow_serveral=False)
+    if result <= 0:
+        nlog.error("Error : Can't get flavour_info table")
+        return False
+    else:
+        resources = collections.defaultdict(dict)
+        resources['vcpus'] = content['numVirCpu']
+        resources['memmory'] = content['vMemory']
+        resources['gigabytes'] = content['storageSize']
+        return resources
+
+# get number of vnfs in a reservation dict
+# return a dict of reserved quota  after calculating with below formula:
+# reserved = number of vnfs * flavor_detail
+def loading_reserved_quota_by_flavourId(nfvodb, vnfd_flavor_id, number_vnfs):
+    '''
+    get reserved resource for instantiating reservation
+    :param vnfd_flavor_id: flavour id
+    :param number_vnfs: number of vnfs in a reservation
+    :return: reserved resources (dict)
+    '''
+
+    # get flavour info from flavour_info table
+    resources = get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
+    if number_vnfs > 0:
+        for key, val in resources.items():
+            val *= int(number_vnfs)
+            reserved[key] = val
+        nlog.info("SUCCESS: Loading reserved based on flavour id '%s',  reserved = %s", vnfd_flavor_id, reserved)
+        return reserved
+    else:
+        nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
+        return False
+
+def loading_allocated_quota_by_flavourId(nfvodb, vnfd_flavor_id):
+    '''
+    get allocated resources that required when NFVO send resource allocation message to VIM
+    :param nfvodb:
+    :param vnfd_flavor_id: flavour id which is used when NVFNO send resource allocation message to VIM
+    :return: allocated dict: resource allocation
+    '''
+
+    # get flavour info from flavour_info table
+    allocated = get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
+
+    return allocated
+
+
+
 def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
     '''
     Get number of current using vnfs in a project
@@ -328,50 +454,6 @@ def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
     # get vnfd_using_cnt from vnfd_using_info table
     result, vnfd_using_cnt = nfvodb.update_vnf_using_info_table(vnfd_id, action)
     return result, vnfd_using_cnt
-
-def get_project_quotas(nfvodb,resources, project_id, usages=True, parent_project_id=None):
-    """Retrieve quotas for a project.
-
-    Given a list of resources, retrieve the quotas for the given
-    project.
-
-    :param resources: A dictionary of the registered resources.
-    :param project_id: The ID of the project to return quotas for.
-    :param defaults: If True, the quota class value (or the
-                     default value, if there is no value from the
-                     quota class) will be reported if there is no
-                     specific value for the resource.
-    :param usages: If True, the current in_use, reserved and allocated
-                   counts will also be returned.
-    :param parent_project_id: The id of the current project's parent,
-                              if any.
-    """
-    # TODO (ricky) need to be implement when nested quota projects is supported
-    return
-
-def _get_quotas(nfvodb, resources, keys, has_sync, project_id=None,
-                parent_project_id=None):
-    """A helper method which retrieves the quotas for specific resources.
-
-    This specific resource is identified by keys, and which apply to the
-    current context.
-
-    :param nfvodb: db object
-    :param resources: A dictionary of the registered resources.
-    :param keys: A list of the desired quotas to retrieve.
-    :param has_sync: If True, indicates that the resource must
-                     have a sync attribute; if False, indicates
-                     that the resource must NOT have a sync
-                     attribute.
-    :param project_id: Specify the project_id if current context
-                       is admin and admin wants to impact on
-                       common user's tenant.
-    :param parent_project_id: The id of the current project's parent,
-                              if any.
-    """
-    # TODO (ricky) need to be implement when nested quota projects is supported
-    return
-
 
 class DbQuotaDriver(object):
     """Driver to perform check to enforcement of quotas.
@@ -639,55 +721,6 @@ def reserve(nfvodb, resources, deltas, expire=None,
 #     else:
 #         nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
 
-def load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
-
-    # get flavour info from flavour_info table
-    result, content = nfvodb.get_table_by_uuid_name("flavour_info", vnfd_flavor_id, error_item_text=None, allow_serveral=False)
-    if result <= 0:
-        nlog.error("Error : Can't get flavour_info table")
-        return False
-    else:
-        resources = collections.defaultdict(dict)
-        resources['vcpus'] = content['numVirCpu']
-        resources['memmory'] = content['vMemory']
-        resources['gigabytes'] = content['storageSize']
-        return resources
-
-# get number of vnfs in a reservation dict
-# return a dict of reserved quota  after calculating with below formula:
-# reserved = number of vnfs * flavor_detail
-def quota_reserved(nfvodb, vnfd_flavor_id, number_vnfs):
-    '''
-    get reserved resource for instantiating reservation
-    :param vnfd_flavor_id: flavour id
-    :param number_vnfs: number of vnfs in a reservation
-    :return: reserved resources (dict)
-    '''
-
-    # get flavour info from flavour_info table
-    resources = load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
-    if number_vnfs > 0:
-        for key, val in resources.items():
-            val *= int(number_vnfs)
-            reserved[key] = val
-        nlog.info("SUCCESS: Loading reserved based on flavour id '%s',  reserved = %s", vnfd_flavor_id, reserved)
-        return reserved
-    else:
-        nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
-        return False
-
-def quota_allocated(nfvodb, vnfd_flavor_id):
-    '''
-    get allocated resources that required when NVFNO send resource allocation message to VIM
-    :param nfvodb:
-    :param vnfd_flavor_id: flavour id which is used when NVFNO send resource allocation message to VIM
-    :return: allocated dict: resource allocation
-    '''
-
-    # get flavour info from flavour_info table
-    allocated = load_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id )
-
-    return allocated
 
 def go_main():
     return 0

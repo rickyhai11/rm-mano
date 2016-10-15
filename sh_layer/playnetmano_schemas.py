@@ -19,9 +19,7 @@ path_schema={"type":"string", "pattern":"^(\.(\.?))?(/[^/"":{}\ \(\)]+)+$"}
 vlan_schema={"type":"integer","minimum":1,"maximum":4095}
 vlan1000_schema={"type":"integer","minimum":1000,"maximum":4095}
 mac_schema={"type":"string", "pattern":"^[0-9a-fA-F][02468aceACE](:[0-9a-fA-F]{2}){5}$"}  #must be unicast LSB bit of MSB byte ==0 
-#mac_schema={"type":"string", "pattern":"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$"}
 ip_schema={"type":"string","pattern":"^([0-9]{1,3}.){3}[0-9]{1,3}$"}
-ip_prefix_len_schema={"type":"integer","minimum":0,"maximum":32}
 port_schema={"type":"integer","minimum":1,"maximum":65534}
 metadata_schema={
     "type":"object",
@@ -63,15 +61,6 @@ config_schema = {
         "vnfm_log_level": name_schema,
         "vim_ip": name_schema,
         "vim_port": port_schema,
-        "mngt_ip": ip_schema,
-        "mngt_ip_prefix_len": ip_prefix_len_schema,
-        # Next fields will disappear once the MANO API includes appropriate primitives
-#        "vim_url": http_schema,
-#        "vim_url_admin": http_schema,
-#        "vim_name": nameshort_schema,
-#        "vim_tenant_name": nameshort_schema,
-#        "mano_tenant_name": nameshort_schema,
-#        "mano_tenant_id": id_schema,
     },
     "required": ['nfvo_db_host', 'nfvo_db_user', 'nfvo_db_passwd', 'nfvo_db_name', 'vnfm_db_host', 'vnfm_db_user', 'vnfm_db_passwd', 'vnfm_db_name'],
     "additionalProperties": False

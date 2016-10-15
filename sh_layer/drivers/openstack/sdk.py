@@ -20,6 +20,7 @@ from sh_layer.drivers.openstack.neutron_v2 import NeutronClient
 from sh_layer.drivers.openstack.nova_v2 import NovaClient
 
 
+
 LOG = log.getLogger(__name__)
 
 
@@ -157,3 +158,4 @@ class OpenStackDriver(object):
             # Reset the cached dictionary
             OpenStackDriver.os_clients_dict = collections.defaultdict(dict)
             return False
+

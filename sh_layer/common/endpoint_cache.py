@@ -7,6 +7,15 @@ from keystoneclient import session
 from keystoneclient.v3 import client as keystone_client
 from oslo_config import cfg
 
+config = {
+    'VERSION': '2.1',
+    'AUTH_URL': "http://116.89.184.94:5000/v3",
+    'USERNAME': "admin",
+    'PASSWORD': "fncp2015",
+    'TENANT_ID': "f4211c8eee044bfb9dea2050fef2ace5",
+    'TENANT_NAME': "admin",
+    'admin_user_domain_name': 'Default',
+    'admin_project_domain_name': 'Default'}
 
 class EndpointCache(object):
     def __init__(self):
@@ -17,13 +26,20 @@ class EndpointCache(object):
 
     @staticmethod
     def _get_admin_token(self):
+        # auth = auth_identity.Password(
+        #     auth_url=cfg.CONF.cache.auth_uri,
+        #     username=cfg.CONF.cache.admin_username,
+        #     password=cfg.CONF.cache.admin_password,
+        #     project_name=cfg.CONF.cache.admin_tenant,
+        #     user_domain_name=cfg.CONF.cache.admin_user_domain_name,
+        #     project_domain_name=cfg.CONF.cache.admin_project_domain_name)
         auth = auth_identity.Password(
-            auth_url=cfg.CONF.cache.auth_uri,
-            username=cfg.CONF.cache.admin_username,
-            password=cfg.CONF.cache.admin_password,
-            project_name=cfg.CONF.cache.admin_tenant,
-            user_domain_name=cfg.CONF.cache.admin_user_domain_name,
-            project_domain_name=cfg.CONF.cache.admin_project_domain_name)
+            auth_url=config['AUTH_URL'],
+            username=config['USERNAME'],
+            password=config['PASSWORD'],
+            project_name=config['TENANT_NAME'],
+            user_domain_name=config['admin_user_domain_name'],
+            project_domain_name=config['admin_project_domain_name'])
         sess = session.Session(auth=auth)
         self.admin_session = sess
         return sess.get_token()
@@ -31,7 +47,7 @@ class EndpointCache(object):
     # refer to http://docs.openstack.org/developer/keystone/api_curl_examples.html for details
     @staticmethod
     def _get_endpoint_from_keystone(self):
-        auth = token_endpoint.Token(cfg.CONF.cache.auth_uri,
+        auth = token_endpoint.Token(config['AUTH_URL'],
                                     EndpointCache._get_admin_token(self))
         sess = session.Session(auth=auth)
         cli = keystone_client.Client(session=sess)

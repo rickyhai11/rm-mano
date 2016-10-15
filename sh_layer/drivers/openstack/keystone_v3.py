@@ -7,7 +7,7 @@ from sh_layer.common import exceptions
 from sh_layer.drivers import base
 
 # Ensure keystonemiddleware options are imported
-importutils.import_module('keystonemiddleware.auth_token')
+# importutils.import_module('keystonemiddleware.auth_token')
 
 
 class KeystoneClient(base.DriverBase):

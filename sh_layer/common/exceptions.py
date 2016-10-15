@@ -93,9 +93,8 @@ class InternalError(Playnetmano_rmException):
 class InvalidInputError(Playnetmano_rmException):
     message = _("An invalid value was provided")
 
-####################################################################
 # New adding exceptions
-###################################################################
+############################
 
 class OverQuota(Playnetmano_rmException):
     message = _("Quota exceeded for resources: %(overs)s")
