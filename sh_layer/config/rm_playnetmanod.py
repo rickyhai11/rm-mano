@@ -1,10 +1,6 @@
-# from sh_layer.rm_engine.sh_reservation import *
 from sh_layer.rm_engine.sh_quota_manager import *
-# from sh_layer.common.config import *
 from sh_layer.common.utils_rm import *
-from sh_layer.common.exceptions import *
 
-import threading
 
 global global_config
 global_config = {'db_host': '116.89.184.43',

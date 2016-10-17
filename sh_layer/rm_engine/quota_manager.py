@@ -179,4 +179,4 @@ if __name__ == "__main__":
     region_new_limit = {'nova':{"cores": 80,"ram": 102400, "metadata_items": 800,"key_pairs": 800},'cinder':{"volumes": 80,"snapshots": 80, "gigabytes": 800,"backups": 800},'neutron':{"network":80,"port": 80,"router": 80}}
     quota_manager = QuotaManager()
     quota_manager.update_quota_limits(project_id='f4211c8eee044bfb9dea2050fef2ace5', region_new_limit=region_new_limit, current_region='RegionOne')
-    # quota_manager.get_region_for_project('f4211c8eee044bfb9dea2050fef2ace5')
+    quota_manager.get_region_for_project('f4211c8eee044bfb9dea2050fef2ace5')

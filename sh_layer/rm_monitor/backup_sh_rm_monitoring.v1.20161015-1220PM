@@ -474,7 +474,7 @@ def get_volume_details(p_cinder_client):
 
 
 # --
-# sync_flavor_usage_all_tenants()
+# sync_flavor_usage_all_projects()
 # Returns dict of dict for all tenants
 # This is of the form
 #    d['Tenant_Name'] = {
@@ -548,7 +548,7 @@ def sync_flavor_usage_all_tenants():
     return d
 
 # --
-# sync_resource_usage_all_tenants()
+# sync_resource_usage_all_projects()
 # Returns a (k,v) dict where k = tenantname and v is dict of pulled values
 #
 def sync_resource_usage_all_tenants():
@@ -1298,7 +1298,7 @@ def build_dbformat_resource_usage_networks_all_tenants():
 #
 def build_dbformat_resource_usage_storage_all_tenants():
     '''
-    Out put data - quota and limit storage format from sync_hard_limits_all_tenants() function
+    Out put data - quota and limit storage format from sync_hard_limits_all_projects() function
     	'quotas_cinder':
 		{'per_volume_gigabytes': {u'limit': -1, u'reserved': 0, u'in_use': 0}, 'snapshots_lvmdriver-1': {u'limit': -1, u'reserved': 0, u'in_use': 0},
 		'gigabytes': {u'limit': 1000, u'reserved': 0, u'in_use': 0}, 'tenant_id': u'24104f8dd8074d5aae884f25a583e3d4',
@@ -1374,7 +1374,7 @@ def build_dbformat_resource_usage_storage_all_tenants():
 
         # tenant_storage_util['max_total_snapshots_lvmdriver-1']           = tenant_quotas_storage_util['snapshots_lvmdriver-1']['limit']
         # tenant_storage_util['total_snapshots_lvmdriver-1_allocated']     = 0 # total number of gigabytes are allocated to users in a given tenant
-        # tenant_storage_util['total_snapshots_lvmdriver-1_used']          = tenant_quotas_storage_util['snapshots_lvmdriver-1']['in_use'] # get data from sync_resource_usage_all_tenants() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
+        # tenant_storage_util['total_snapshots_lvmdriver-1_used']          = tenant_quotas_storage_util['snapshots_lvmdriver-1']['in_use'] # get data from sync_resource_usage_all_projects() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
         # tenant_storage_util['total_snapshots_lvmdriver-1_available']     = tenant_storage_util['max_total_snapshots_lvmdriver-1'] - tenant_storage_util['total_snapshots_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
         # tenant_storage_util['total_snapshots_lvmdriver-1_reserved']      = 0  # need to recalculate
 
@@ -1387,7 +1387,7 @@ def build_dbformat_resource_usage_storage_all_tenants():
 
         # tenant_storage_util['max_total_volumes_lvmdriver-1']           = tenant_quotas_storage_util['volumes_lvmdriver-1']['limit']
         # tenant_storage_util['total_volumes_lvmdriver-1_allocated']     = 0
-        # tenant_storage_util['total_volumes_lvmdriver-1_used']          = tenant_quotas_storage_util['volumes_lvmdriver-1']['in_use'] # get data from sync_resource_usage_all_tenants() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
+        # tenant_storage_util['total_volumes_lvmdriver-1_used']          = tenant_quotas_storage_util['volumes_lvmdriver-1']['in_use'] # get data from sync_resource_usage_all_projects() function: 'Snapshot_Prov_GB' : t_persist_provisioned_snapshot_value,
         # tenant_storage_util['total_volumes_lvmdriver-1_available']     = tenant_storage_util['max_total_volumes_lvmdriver-1'] - tenant_storage_util['total_volumes_lvmdriver-1_allocated']   # need to recalculate  #TODO if this is first time that app comes up --> initially,(no reserved resource exists: total_vcpus_available = max_total_vcpus - total_vcpus_used  OR max_total_vcpus)
         # tenant_storage_util['total_volumes_lvmdriver-1_reserved']      = 0  # need to recalculate
 
@@ -1428,7 +1428,7 @@ def __get_list_users_per_tenant():
 
 def _convert_user_str_2_dict(data):
     '''
-    this function is to convert data format from __get_list_users_per_tenant function : string format to dictionary
+    this function is to convert data format from _get_list_users_per_project function : string format to dictionary
     format for each of user in a given tenant
     :param data: is string format including user info in a  given tenant
     :return: dict format of a user in a given tenant
@@ -1693,8 +1693,8 @@ if __name__ == "__main__":
         if mydb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
-        # data_list = get_resource_usage_compute_for_all_users_in_all_tenants()
-        # # data_list = get_resource_usage_network_for_all_users_in_all_tenants()
+        # data_list = get_resource_usage_compute_for_all_users_in_all_projects()
+        # # data_list = get_resource_usage_network_for_all_users_in_all_projects()
         # for data in data_list:
         #     add_resource_2_db(mydb, table='users_util_compute_rm', data=data)
         d= sync_resource_usage_for_tenant('25970fbcfb0a4c2fb42ccc18f1bccde3')

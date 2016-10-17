@@ -354,7 +354,7 @@ class utils_db():
                 return deleted, table[:-1] + " '%s' %s" %(uuid, "deleted" if deleted==1 else "not found")
 
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_tenant DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_project DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c =  self.format_error(e, "delete", 'instances' if table=='hosts' or table=='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c
@@ -407,7 +407,7 @@ class utils_db():
                     deleted = self.cur.rowcount
                 return deleted, "%d deleted from %s" % (deleted, sql_dict['FROM'][:-1] )
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_tenant DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_project DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c =  self.format_error(e, "delete", 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c
@@ -543,7 +543,7 @@ class utils_db():
     # Resource management, go here
     #
     ####################################################################################
-    def _get_resource_for_tenant_from_db(self, table, tenant_id):
+    def _get_resource_for_project_from_db(self, table, tenant_id):
         '''
         get resource usage for a given tenant/project
         :param table:
@@ -559,7 +559,7 @@ class utils_db():
                     rows = self.cur.fetchall()
                     return self.cur.rowcount, rows
             except (mdb.Error, AttributeError), e:
-                nlog.error("utils_db._get_resource_for_tenant_from_db DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("utils_db._get_resource_for_project_from_db DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r, c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c
@@ -672,7 +672,7 @@ class utils_db():
                     return r,c
 
     # delete all resources for a given tenant
-    def delete_resource_for_tenant(self, table, tenant_id, log=False):
+    def delete_resource_for_project(self, table, tenant_id, log=False):
 
         for retry_ in range(0, 2):
             try:
@@ -687,14 +687,14 @@ class utils_db():
                 return deleted, table[:-1] + " '%s' %s" %(tenant_id, "all resources for a given project: deleted" if deleted == 1 else "not found")
 
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_tenant DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_project DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c =  self.format_error(e, "delete", 'instances' if table =='hosts' or table =='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c
 
     # delete a specific resource by name for a given tenant
     # uuid_name  =  resource name e.g; 'vcpus'... or uuid
-    def delete_resource_by_name_uuid_for_tenant(self, table, tenant_id, uuid_name, log=False):
+    def delete_resource_by_name_uuid_for_project(self, table, tenant_id, uuid_name, log=False):
 
         what = 'uuid' if utils.check_valid_uuid(uuid_name) else 'resource'
         # validate input resource name
@@ -713,7 +713,7 @@ class utils_db():
                 return deleted, table[:-1] + " '%s' %s" %(uuid_name, "deleted" if deleted == 1 else "not found")
 
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_tenant DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.delete_resource_by_name_uuid_for_project DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c =  self.format_error(e, "delete", 'instances' if table =='hosts' or table =='tenants' else 'dependencies')
                 if r!=-HTTP_Request_Timeout or retry_==1:
                     return r,c

@@ -148,7 +148,7 @@ class resource_db(utils_db):
                     print "Delete successfully a reservation: %s " % deleted
                 return deleted
             except (mdb.Error, AttributeError), e:
-                print "resource_db.delete_resource_by_name_uuid_for_tenant DB Exception %d : %s" % (e.argrs[0], e.args[1])
+                print "resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
     # delete a reservation with rsv_id and project_id
     # provide project_id here to be easier when calculate resource usage for a given project
@@ -170,7 +170,7 @@ class resource_db(utils_db):
                     print "Delete successfully a reservation: %s " % deleted
                 return deleted
             except (mdb.Error, AttributeError), e:
-                print "resource_db.delete_resource_by_name_uuid_for_tenant DB Exception %d : %s" % (e.argrs[0], e.args[1])
+                print "resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
     def update_row_timestamp_by_rsv_id(self, reservation_id, start_time, end_time):
         '''
@@ -441,7 +441,7 @@ class resource_db(utils_db):
         :param project_id:
         :return: result, list_reservations
         '''
-        result, list_reservations = self._get_resource_for_tenant_from_db('reservation', project_id)
+        result, list_reservations = self._get_resource_for_project_from_db('reservation', project_id)
         if result <= 0:
             nlog.error("Error : get list of reservations from DB  (project ID =%s, )", project_id)
             return False, None
@@ -846,7 +846,7 @@ class resource_db(utils_db):
         :return: result and rows (list of resource usage dict)
         '''
 
-        result, resource_usage = self._get_resource_for_tenant_from_db('resource_usage_rm', tenant_id)
+        result, resource_usage = self._get_resource_for_project_from_db('resource_usage_rm', tenant_id)
         if result <= 0:
             nlog.error("Error : get resource usage DB  (tenant ID =%s, )", tenant_id)
             return False, None
@@ -883,8 +883,8 @@ class resource_db(utils_db):
 
 
     def delete_resource_usage_for_tenant(self, tenant_id):
-        result, _ = self.delete_resource_for_tenant('resource_usage_rm', tenant_id,
-                                                                 log=False)
+        result, _ = self.delete_resource_for_project('resource_usage_rm', tenant_id,
+                                                     log=False)
         if result <= 0:
             nlog.error("Error :  can't '_delete'resource usage for tenant ID '%s' from DB", tenant_id)
             return False, None
@@ -894,8 +894,8 @@ class resource_db(utils_db):
         return result
 
     def delete_resource_usage_by_name_for_tenant(self, tenant_id, uuid_name):
-        result, _ = self.delete_resource_by_name_uuid_for_tenant('resource_usage_rm', tenant_id, uuid_name,
-                                                                              log=False)
+        result, _ = self.delete_resource_by_name_uuid_for_project('resource_usage_rm', tenant_id, uuid_name,
+                                                                  log=False)
         if result <= 0:
             nlog.error("Error : can't del resource usage from DB with (uuid/resource name =%s in tenant ID '%s')",
                        uuid_name, tenant_id)
@@ -1040,7 +1040,7 @@ class resource_db(utils_db):
         :param tenant_id:
         :return: all quota resources for a given tenant
         '''
-        result, resource_usage = self._get_resource_for_tenant_from_db('quota_rm', tenant_id)
+        result, resource_usage = self._get_resource_for_project_from_db('quota_rm', tenant_id)
         if result <= 0:
             nlog.error("Error : get quota DB  (tenant ID =%s, )", tenant_id)
             return False, None
@@ -1074,7 +1074,7 @@ class resource_db(utils_db):
         :param tenant_id:
         :return:
         '''
-        result, _ = self.delete_resource_for_tenant('quota_rm', tenant_id, log=False)
+        result, _ = self.delete_resource_for_project('quota_rm', tenant_id, log=False)
         if result <= 0:
             nlog.error("Error :  can't '_delete' all quotas for tenant ID '%s' from DB", tenant_id)
             return False, None
@@ -1085,8 +1085,8 @@ class resource_db(utils_db):
 
     # delete a specific quota resource by name
     def delete_quota_by_name_for_project(self, tenant_id, resource):
-        result, _ = self.delete_resource_by_name_uuid_for_tenant('quota_rm', tenant_id=tenant_id,
-                                                                 uuid_name=resource, log=False)
+        result, _ = self.delete_resource_by_name_uuid_for_project('quota_rm', tenant_id=tenant_id,
+                                                                  uuid_name=resource, log=False)
         if result <= 0:
             nlog.error("Error : can't del quota resource with (uuid/resource =%s in tenant ID '%s')",
                        resource, tenant_id)
@@ -1099,40 +1099,9 @@ class resource_db(utils_db):
     def sync_quota_for_tenant(self, tenant_id, sync=False):
         return
 
-
-
-
-
-
-
-
-
     ###############
     # Old codes
     ################################################################################
-    # def update_tenants_utilization_compute_rm_table(self, uuid, action):
-    #     # get vnf_using_cnt
-    #     result, content = self.get_table_by_uuid_name("tenants_utilization_compute_rm", uuid, error_item_text=None, allow_serveral=False)
-    #     if result <= 0:
-    #         nlog.error("Error : Can't get tenants_utilization_compute_rm table")
-    #         return False, None
-    #     else:
-    #         vnfd_using_cnt = content['vnfdUsingCnt']
-    #         nlog.debug("vnfd using cnt = %d", vnfd_using_cnt)
-    #
-    #     if action == 'ADD':            vnfd_using_cnt = vnfd_using_cnt + 1
-    #     elif action == 'DELETE':       vnfd_using_cnt = vnfd_using_cnt - 1
-    #     else:                          return False, None
-    #
-    #     # update vnf_using_cnt
-    #     update_info = {'vnfdUsingCnt': vnfd_using_cnt}
-    #     result, _ = self.update_rows("vnfd_using_info", UPDATE=update_info, WHERE={'uuid':uuid}, log=True)
-    #     if result < 0:
-    #         nlog.error("Error : Can't table(vnfd_using_info) update")
-    #         return False, None
-    #
-    #     return True, vnfd_using_cnt
-    #
     # def delete_row_by_uuid_composite(self, table_name, uuid):
     #     try:
     #         with self.con:
@@ -1184,9 +1153,9 @@ class resource_db(utils_db):
         except(mdb.Error, AttributeError), e:
             print "resource_db.get_all_rows_for_table_composite DB exception %d: %s" % (e.args[0], e.args[1])
 
-    # ****************************************************************************************************************************************************************
+    # ************************************************************
     # Old codes - users and tenants based - resources management- basic DB operations. Go here
-    # ****************************************************************************************************************************************************************
+    # ***********************************************************
 
     def get_newest_row_by_timestamp_userid_tenantid(self, table_name, user_id, tenant_id):
         '''

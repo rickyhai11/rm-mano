@@ -60,8 +60,9 @@ class sh_reservation():
             print list_created_rsv
             return list_created_rsv
 
-def reservation_expire(context):
-    return
+    def reservation_expire(self, nfvodb):
+        # TODO (ricky) need to implement
+        return
 
 class sh_control():
 

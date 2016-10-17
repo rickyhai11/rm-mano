@@ -1,8 +1,8 @@
 
 NOVA_QUOTA_FIELDS = ("metadata_items",
-                     "cores",
-                     "instances",
-                     "ram",
+                     "vcpus",
+                     "vnfs",
+                     "vmemory",
                      "key_pairs",
                      "floating_ips",
                      "fixed_ips",
@@ -20,7 +20,8 @@ CINDER_QUOTA_FIELDS = ("volumes",
 
 # CINDER_QUOTA_FIELDS = ("volumes",
 #                        "snapshots",
-#                        "gigabytes") # t_disk_ephemeral= compute_summary['total_disk']+ compute_summary['total_ephemeral']
+#                        "gigabytes")
+#  gigabytes: t_disk_ephemeral= compute_summary['total_disk']+ compute_summary['total_ephemeral']
 
 
 NEUTRON_QUOTA_FIELDS = ("network",
@@ -37,16 +38,25 @@ NEUTRON_QUOTA_FIELDS = ("network",
 #                         "router",
 #                         "floatingip")
 
-QUOTA_FIELDS = ("vcpus",
+QUOTA_FIELDS = (  # compute quota
+                "metadata_items",
+                "vcpus",
                 "vnfs",
-                "memory",
-                "floatingip_default",  # in case neutron is disable and nova network is used
-                                       # TODO(ricky) check if neutron is disabled or enabled
+                "vmemory",
+                "key_pairs",
+                "floating_ips",
+                "fixed_ips",
+                # cinder quota
                 "volumes",
                 "snapshots",
                 "gigabytes",
+                "backups",
+                "backup_gigabytes",
+                # neutron quota
                 "network",
                 "subnet",
                 "port",
                 "router",
-                "floatingip")
+                "floatingip",
+                "security_group",
+                "security_group_rule")

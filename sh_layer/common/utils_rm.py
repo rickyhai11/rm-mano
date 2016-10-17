@@ -8,19 +8,11 @@ from sh_layer.rm_monitor.sh_rm_monitoring import *
 from sh_layer.global_info import *
 
 
-# Returns a iterator of tuples containing batch_size number of objects in each
-def get_batch_projects(batch_size, project_list, fillvalue=None):
-    # look at this link to see what happened
-    # http://stackoverflow.com/questions/28847334/how-to-unserstand-the-code-using-izip-longest-to-chunk-a-list
-    args = [iter(project_list)] * batch_size
-    return itertools.izip_longest(fillvalue=fillvalue, *args)
-
-
 # to do validate the quota limits
 def validate_resource_by_name(resource):
     if resource not in itertools.chain(consts.CINDER_QUOTA_FIELDS,
-                                       consts.NOVA_QUOTA_FIELDS,
-                                       consts.NEUTRON_QUOTA_FIELDS):
+                                   consts.NOVA_QUOTA_FIELDS,
+                                   consts.NEUTRON_QUOTA_FIELDS):
         raise exceptions.InvalidInputError
 
 def validate_quota_limits(payload):
@@ -34,68 +26,6 @@ def validate_quota_limits(payload):
         # TODO (ricky) implement constrains for input data
         # if isinstance(payload, dict) and (not isinstance(payload[resource], int) or payload[resource] <= 0):
         #     raise exceptions.InvalidInputError
-
-def _build_visible_quota(quota_set):
-    quota_map = [
-        'id', 'instances', 'ram', 'cores', 'key_pairs',
-        'floating_ips', 'fixed_ips',
-        'injected_files', 'injected_file_path_bytes',
-        'injected_file_content_bytes',
-        'security_groups', 'security_group_rules',
-        'metadata_items', 'server_groups', 'server_group_members',
-    ]
-
-    ret = {}
-    # only return Nova visible quota items
-    for k, v in quota_set.iteritems():
-        if k in quota_map:
-            ret[k] = v
-
-    return ret
-
-
-def build_absolute_limits(quotas):
-
-    quota_map = {
-        'maxTotalRAMSize': 'memory',
-        'maxTotalInstances': 'vnfs',
-        'maxTotalCores': 'vcpus',
-        'maxTotalKeypairs': 'key_pairs',
-        'maxTotalFloatingIps': 'floating_ip',
-        'maxPersonality': 'injected_files',
-        'maxPersonalitySize': 'injected_file_content_bytes',
-        'maxSecurityGroups': 'security_groups',
-        'maxSecurityGroupRules': 'security_group_rules',
-        'maxServerMeta': 'metadata_items',
-        'maxServerGroups': 'server_groups',
-        'maxServerGroupMembers': 'server_group_members',
-    }
-
-    limits = {}
-    for display_name, key in six.iteritems(quota_map):
-        if key in quotas:
-            limits[display_name] = quotas[key]['limit']
-    return limits
-
-def build_used_limits(quotas):
-
-    quota_map = {
-        'totalRAMUsed': 'memory',
-        'totalCoresUsed': 'vcpus',
-        'totalInstancesUsed': 'vnfs',
-        'totalFloatingIpsUsed': 'floating_ip',
-        'totalSecurityGroupsUsed': 'security_groups',
-        'totalServerGroupsUsed': 'server_groups',
-    }
-
-    # need to refresh usage from the bottom pods? Now from the data in top
-    used_limits = {}
-    for display_name, key in six.iteritems(quota_map):
-        if key in quotas:
-            reserved = quotas[key]['reserved']
-            used_limits[display_name] = quotas[key]['in_use'] + reserved
-
-    return used_limits
 
 def load_flavors_from_vim(flavor_id):
     '''
@@ -112,7 +42,7 @@ def load_flavors_from_vim(flavor_id):
             # flavor_details['name'] = flavor.name
             # flavor_details['uuid'] = flavor.id
             flavor_details['vcpus'] = flavor.vcpus
-            flavor_details['memory'] = flavor.ram
+            flavor_details['vmemory'] = flavor.ram
             flavor_details['gigabytes'] = flavor.disk
             return flavor_details
         else:
@@ -221,3 +151,79 @@ def resource_calculation(current_value, acquired_value, action):
     else:
         nlog.error("ERROR: utils_rm.resource_calculation() - Failed to calculate resource usage")
         return False, None
+
+#
+# currently Un-used code
+#################################
+
+# Returns a iterator of tuples containing batch_size number of objects in each
+
+
+def get_batch_projects(batch_size, project_list, fillvalue=None):
+    # look at this link to see what happened
+    # http://stackoverflow.com/questions/28847334/how-to-unserstand-the-code-using-izip-longest-to-chunk-a-list
+    args = [iter(project_list)] * batch_size
+    return itertools.izip_longest(fillvalue=fillvalue, *args)
+
+
+def _build_visible_quota(quota_set):
+    quota_map = [
+        'id', 'instances', 'ram', 'cores', 'key_pairs',
+        'floating_ips', 'fixed_ips',
+        'injected_files', 'injected_file_path_bytes',
+        'injected_file_content_bytes',
+        'security_groups', 'security_group_rules',
+        'metadata_items', 'server_groups', 'server_group_members',
+    ]
+
+    ret = {}
+    # only return Nova visible quota items
+    for k, v in quota_set.iteritems():
+        if k in quota_map:
+            ret[k] = v
+
+    return ret
+
+
+def build_absolute_limits(quotas):
+
+    quota_map = {
+        'maxTotalRAMSize': 'vmemory',
+        'maxTotalInstances': 'vnfs',
+        'maxTotalCores': 'vcpus',
+        'maxTotalKeypairs': 'key_pairs',
+        'maxTotalFloatingIps': 'floating_ips',
+        'maxPersonality': 'injected_files',
+        'maxPersonalitySize': 'injected_file_content_bytes',
+        'maxSecurityGroups': 'security_groups',
+        'maxSecurityGroupRules': 'security_group_rules',
+        'maxServerMeta': 'metadata_items',
+        'maxServerGroups': 'server_groups',
+        'maxServerGroupMembers': 'server_group_members',
+    }
+
+    limits = {}
+    for display_name, key in six.iteritems(quota_map):
+        if key in quotas:
+            limits[display_name] = quotas[key]['limit']
+    return limits
+
+def build_used_limits(quotas):
+
+    quota_map = {
+        'totalRAMUsed': 'memory',
+        'totalCoresUsed': 'vcpus',
+        'totalInstancesUsed': 'vnfs',
+        'totalFloatingIpsUsed': 'floating_ips',
+        'totalSecurityGroupsUsed': 'security_groups',
+        'totalServerGroupsUsed': 'server_groups',
+    }
+
+    # need to refresh usage from the bottom pods? Now from the data in top
+    used_limits = {}
+    for display_name, key in six.iteritems(quota_map):
+        if key in quotas:
+            reserved = quotas[key]['reserved']
+            used_limits[display_name] = quotas[key]['in_use'] + reserved
+
+    return used_limits

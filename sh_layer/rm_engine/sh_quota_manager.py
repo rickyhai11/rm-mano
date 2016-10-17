@@ -95,7 +95,7 @@ def sync_resource_usage(nfvodb, tenant_id):
     '''
     # TODO (ricky) need to take in to account this point: add new records or update existing records ?? prefer to update option
 
-    actual_resource_usage = sync_resource_usage_for_tenant(tenant_id)
+    actual_resource_usage = sync_resource_usage_for_project(tenant_id)
     nlog.info('INFO: Starting sync to get actual resource usage from vim')
     for resource in QUOTA_FIELDS:
         result, uuid = nfvodb.new_row(table='resource_usage_rm', INSERT=actual_resource_usage[resource], add_uuid=True,
@@ -401,7 +401,7 @@ def get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
     else:
         resources = collections.defaultdict(dict)
         resources['vcpus'] = content['numVirCpu']
-        resources['memmory'] = content['vMemory']
+        resources['vmemmory'] = content['vMemory']
         resources['gigabytes'] = content['storageSize']
         return resources
 
