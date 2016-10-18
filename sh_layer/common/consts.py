@@ -7,10 +7,6 @@ NOVA_QUOTA_FIELDS = ("metadata_items",
                      "floating_ips",
                      "fixed_ips",
                      "security_groups",)
-# NOVA_QUOTA_FIELDS = ("vcpus",
-#                      "vnfs",
-#                      "memory",
-#                      "floatingip_default")
 
 CINDER_QUOTA_FIELDS = ("volumes",
                        "snapshots",
@@ -18,10 +14,6 @@ CINDER_QUOTA_FIELDS = ("volumes",
                        "backups",
                        "backup_gigabytes")
 
-# CINDER_QUOTA_FIELDS = ("volumes",
-#                        "snapshots",
-#                        "gigabytes")
-#  gigabytes: t_disk_ephemeral= compute_summary['total_disk']+ compute_summary['total_ephemeral']
 
 
 NEUTRON_QUOTA_FIELDS = ("network",
@@ -32,11 +24,6 @@ NEUTRON_QUOTA_FIELDS = ("network",
                         "security_group",
                         "security_group_rule",
                         )
-# NEUTRON_QUOTA_FIELDS = ("network",
-#                         "subnet",
-#                         "port",
-#                         "router",
-#                         "floatingip")
 
 QUOTA_FIELDS = (  # compute quota
                 "metadata_items",
@@ -46,6 +33,7 @@ QUOTA_FIELDS = (  # compute quota
                 "key_pairs",
                 "floating_ips",
                 "fixed_ips",
+                "security_groups",
                 # cinder quota
                 "volumes",
                 "snapshots",
@@ -60,3 +48,27 @@ QUOTA_FIELDS = (  # compute quota
                 "floatingip",
                 "security_group",
                 "security_group_rule")
+
+NOVA_QUOTA_FIELDS_AT_VIM = ("metadata_items",
+                     "cores",
+                     "instances",
+                     "ram",
+                     "key_pairs",
+                     "floating_ips",
+                     "fixed_ips",
+                     "security_groups",)
+
+CINDER_QUOTA_FIELDS_AT_VIM = ("volumes",
+                       "snapshots",
+                       "gigabytes",
+                       "backups",
+                       "backup_gigabytes")
+
+NEUTRON_QUOTA_FIELDS_AT_VIM = ("network",
+                        "subnet",
+                        "port",
+                        "router",
+                        "floatingip",
+                        "security_group",
+                        "security_group_rule",
+                        )

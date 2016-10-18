@@ -36,7 +36,23 @@ if __name__ == "__main__":
         if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
-        # quotas = {'vcpus': 11, 'vnfs' : 11, 'memory': 11, 'network': 11, 'port': 11 }
+        quotas = {'vcpus': 8, 'vnfs' : 11, 'vmemory': 11, 'network': 11, 'port': 11 }
+        # quotas_result = create_quotas_project(nfvodb, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3', quotas=quotas)
+        # print quotas_result
+
+        # VimQuotaManager class test
+        # region_new_limit = {'nova':{"cores": 80,"ram": 102400, "metadata_items": 800,"key_pairs": 800},'cinder':{"volumes": 80,"snapshots": 80, "gigabytes": 800,"backups": 800},'neutron':{"network":80,"port": 80,"router": 80}}
+        quota_manager = VimQuotaManager(nfvodb)
+        # quota_manager.quota_sync_for_project(nfvodb, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
+
+        # delete_quotas_for_tenant(nfvodb, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
+        # quota_manager.update_quota_limits(project_id='f4211c8eee044bfb9dea2050fef2ace5', region_new_limit=region_new_limit, current_region='RegionOne')
+        # quota_manager.get_region_for_project('f4211c8eee044bfb9dea2050fef2ace5')
+
+        # test get actual usage resources from vim
+        actual_usage = quota_manager.get_total_usage_for_tenant(nfvodb, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
+        print actual_usage
+
 
         # # test validate function
         # name = 'vcpu'
@@ -67,9 +83,9 @@ if __name__ == "__main__":
         # print out_quotas
 
         # test limit_check() and available_check() functions
-        values = {'vcpus': 10, 'vnfs' : 10, 'memory': 11, 'network': 10,}
+        # values = {'vcpus': 10, 'vnfs' : 10, 'memory': 11, 'network': 10,}
         # limit_check(nfvodb, values, project_id ='25970fbcfb0a4c2fb42ccc18f1bccde3')
-        re= available_resource_check_for_project(nfvodb, values, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
+        # re= available_resource_check_for_project(nfvodb, values, project_id='25970fbcfb0a4c2fb42ccc18f1bccde3')
         # print re
 
         # test covert resource usage function

@@ -1,6 +1,6 @@
+# import sys
+# import collections
 import MySQLdb.cursors
-import sys
-import collections
 
 # from sh_layer.global_info import *
 # from sh_layer.common.consts import *
@@ -516,7 +516,8 @@ class resource_db(utils_db):
 
     # Create a resource usage by name for a given tenant
     # (using with reservation operations probably, for instance: after create reservation --> call this )
-    def create_resource_usage_by_name_for_tenant(self, tenant_id, resource, in_use, reserved,  util_refresh=False):
+    def create_resource_usage_by_name_for_tenant(self, tenant_id, resource, in_use, reserved,
+                                                 util_refresh=False):
         '''
         Create resource usage for a specific resource in a given tenant/project
         :param tenant_id:
@@ -532,7 +533,7 @@ class resource_db(utils_db):
         # First check if there are any duplicate rows with corresponding project id and resource in db
         nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
                                                              uuid_name=resource, error_item_text=None,
-                                                             allow_serveral=True)
+                                                                    allow_serveral=True)
         # print nb_rows
         # if there are no duplicates in db
         if nb_rows == 0:
@@ -1079,6 +1080,8 @@ class resource_db(utils_db):
             nlog.error("Error :  can't '_delete' all quotas for tenant ID '%s' from DB", tenant_id)
             return False, None
         else:
+            # TODO (ricky) when delete quota for a project, resource usage for that project
+            # should be deleted accordingly
             nlog.info("Success : __del resource usage information from resource_usage_rm table for a tenant ID '%s'",
                       tenant_id)
         return result

@@ -7,11 +7,27 @@ Implemetation capacity management
 Quota Management and Resource Usage are implemented here and they are used by NFVO API or RM API modules
 '''
 
+# Quota Manger class imports
+# import collections
+# import re
+# import time
+from Queue import Queue
+import threading
+
+# from sh_layer.common import consts
+# from sh_layer.common import exceptions
+# from sh_layer.common.i18n import _LE
+# from sh_layer.common.i18n import _LI
+from sh_layer.common import endpoint_cache
+from sh_layer.drivers.openstack import sdk
+
+# original imports
 import datetime
 
-from sh_layer.rm_monitor.sh_rm_monitoring import *
+# from sh_layer.rm_monitor.sh_rm_monitoring import *
 from sh_layer.common.utils_rm import *
 from sh_layer.global_info import *
+
 
 #
 # Resource usage go here
@@ -263,6 +279,199 @@ def quota_destroy_by_project(*args, **kwargs):
     """
     quota_destroy_all_by_project(only_quotas=True, *args, **kwargs)
 
+class VimQuotaManager():
+    """Manages tasks related to quota management from NFVO to VIM and otherwise VIM to NFVO
+       sync quota from NFVO db to vim (NFVO-->VIM)
+       sync actual resource usage from vim to nfvo when quota nearly exceeds and need to re-compute (VIM-->NFVO)
+    """
+
+    def __init__(self, nfvodb):
+        self.endpoints = endpoint_cache.EndpointCache()
+        self.nfvodb = nfvodb
+
+    def read_quota_usage(self, project_id, region, usage_queue):
+        # Writes usage dict to the Queue in the following format
+        # {'region_name': (<nova_usages>, <neutron_usages>, <cinder_usages>)}
+
+        os_client = sdk.OpenStackDriver(region)
+        region_usage = os_client.get_resource_usages(project_id)
+        total_region_usage = collections.defaultdict(dict)
+        # region_usage[0], region_usage[1], region_usage[3] are
+        # nova, neutron & cinder usages respectively
+        total_region_usage.update(region_usage[0])
+        total_region_usage.update(region_usage[1])
+        total_region_usage.update(region_usage[2])
+        usage_queue.put({region: total_region_usage})
+
+    def get_summation(self, regions_dict):
+        # Adds resources usages from different regions
+        single_region = {}
+        resultant_dict = collections.Counter()
+        for current_region in regions_dict:
+            single_region[current_region] = collections.Counter(
+                regions_dict[current_region])
+            resultant_dict += single_region[current_region]
+        return resultant_dict
+
+    # get quota limits for a project then combined with resource usage to return
+    # for "Get total usage for a project" api request
+    def _get_playnetmano_rm_project_limit(self, nfvodb, project_id):
+        # Returns playnetmano_rm project limit for a project.
+        # playnetmano_rm_limits_for_project = collections.defaultdict(dict)
+        try:
+            # checks if there are any quota limit in DB for a project
+            # get project quot limit for a project from db (quota table)
+            limits_from_db = get_quotas_for_project(nfvodb, project_id)
+
+            # convert to quota names that is visible at vim, this step is required for quota sync (for a project)
+            # sync from nfvo --> vim
+            limits_visible_at_vim = build_visible_quota_at_vim(limits_from_db)
+
+            return limits_visible_at_vim  # remove this line when below codes undo
+        except exceptions.ProjectQuotaNotFound:
+            rmlog.error("ERROR: can't get quota limit from db")
+
+        #     limits_from_db = {}
+        # for current_resource in config.playnetmano_rm_global_limit.iteritems():
+        #     resource = re.sub('quota_', '', current_resource[0])
+            # If resource limit in DB, then use it or else use limit
+            # from conf file
+            # TODO (ricky) implement config file with default quota values for rm_mano then undo
+            # if resource in limits_from_db:
+            #     playnetmano_rm_limits_for_project[resource] = limits_from_db[resource]
+            # else:
+            #     playnetmano_rm_limits_for_project[resource] = current_resource[1]
+        # return playnetmano_rm_limits_for_project
+
+    # arrange quotas by service (nova, cinder, neutron) to update or delete quota by service --> to vim
+    def _arrange_quotas_by_service_name(self, region_new_limit):
+        # Returns a dict of resources with limits arranged by service name
+        resource_with_service = collections.defaultdict(dict)
+        resource_with_service['nova'] = collections.defaultdict(dict)
+        resource_with_service['cinder'] = collections.defaultdict(dict)
+        resource_with_service['neutron'] = collections.defaultdict(dict)
+        for limit in region_new_limit:
+            if limit in consts.NOVA_QUOTA_FIELDS_AT_VIM:
+                resource_with_service['nova'].update(
+                    {limit: region_new_limit[limit]})
+            elif limit in consts.CINDER_QUOTA_FIELDS_AT_VIM:
+                resource_with_service['cinder'].update(
+                    {limit: region_new_limit[limit]})
+            elif limit in consts.NEUTRON_QUOTA_FIELDS_AT_VIM:
+                resource_with_service['neutron'].update(
+                    {limit: region_new_limit[limit]})
+        return resource_with_service
+
+    def update_quota_limits(self, project_id, region_new_limit,
+                            current_region):
+        # Updates quota limit for a project with new calculated limit
+        os_client = sdk.OpenStackDriver(current_region)
+        os_client.write_quota_limits(project_id, region_new_limit)
+
+    # sync quotas for a given project  from nfvo to vim
+    def quota_sync_for_project(self, nfvodb, project_id):
+        # Support multi regions and multi vims:
+        # Sync quota limits for the project according to below formula
+        # Global remaining limit = Playnetmano_rm global limit - Summation of usages
+        #                          in all the regions
+        # New quota limit = Global remaining limit + usage in that region
+
+        # Notice: this formula will work effectively with multi regions/vims and also work well with only one region
+        # with only one region, quota is kept as user set previously in  request or db
+        # example: user set quota= {'vcpus': 10} --> after sync (go through above formula),
+        # quota for that region is still {'vcpus' : 10}
+
+        rmlog.info("INFO: Quota sync Called for Project: %s", project_id)
+        regions_thread_list = []
+        # Retrieve regions for the project
+        region_lists = sdk.OpenStackDriver().get_all_regions_for_project(
+            project_id)
+        regions_usage_dict = self.get_tenant_quota_usage_per_region(project_id)
+        if not regions_usage_dict:
+            # Skip syncing for the project if not able to read regions usage
+            rmlog.error("ERROR: Error reading regions usage for the Project: '%s'. "
+                      "Aborting, continue with next project.", project_id)
+            return
+        total_project_usages = dict(self.get_summation(regions_usage_dict))
+        playnetmano_rm_global_limit = self._get_playnetmano_rm_project_limit(nfvodb, project_id)
+        global_remaining_limit = collections.Counter(
+            playnetmano_rm_global_limit) - collections.Counter(total_project_usages)
+
+        for current_region in region_lists:
+            region_new_limit = dict(
+                global_remaining_limit + collections.Counter(
+                    regions_usage_dict[current_region]))
+            region_new_limit = self._arrange_quotas_by_service_name(
+                region_new_limit)
+            thread = threading.Thread(target=self.update_quota_limits,
+                                      args=(project_id, region_new_limit,
+                                            current_region,))
+            regions_thread_list.append(thread)
+            thread.start()
+
+        # Wait for all the threads to update quota
+        for current_thread in regions_thread_list:
+            current_thread.join()
+
+    def get_tenant_quota_usage_per_region(self, project_id):
+        # Return quota usage dict with keys as region name & values as usages.
+        # Calculates the usage from each region concurrently using threads.
+
+        # Retrieve regions for the project
+        region_lists = sdk.OpenStackDriver().get_all_regions_for_project(
+            project_id)
+        usage_queue = Queue()
+        regions_usage_dict = collections.defaultdict(dict)
+        regions_thread_list = []
+        for current_region in region_lists:
+            thread = threading.Thread(target=self.read_quota_usage,
+                                      args=(project_id, current_region,
+                                            usage_queue))
+            regions_thread_list.append(thread)
+            thread.start()
+        # Wait for all the threads to finish reading usages
+        for current_thread in regions_thread_list:
+            current_thread.join()
+        # Check If all the regions usages are read
+        if len(region_lists) == usage_queue.qsize():
+            for i in range(usage_queue.qsize()):
+                # Read Queue
+                current_region_data = usage_queue.get()
+                regions_usage_dict.update(current_region_data)
+        return regions_usage_dict
+
+    def get_total_usage_for_tenant(self, nfvodb, project_id):
+        # Returns total quota usage for a tenant
+        rmlog.info("INFO: Get total usage called for project: %s", project_id)
+        try:
+            total_usage = dict(self.get_summation(
+                self.get_tenant_quota_usage_per_region(project_id)))
+            playnetmano_rm_global_limit = self._get_playnetmano_rm_project_limit(nfvodb, project_id)
+            # Get unused quotas
+            unused_quota = set(playnetmano_rm_global_limit).difference(set(total_usage.keys()))
+            # Create a dict with value as '0' for unused quotas
+            unused_quota = dict((quota_name, 0) for quota_name in unused_quota)
+            total_usage.update(unused_quota)
+            return {'limits': playnetmano_rm_global_limit,
+                    'usage': total_usage}
+        except exceptions.NotFound:
+            raise
+
+    def sync_total_usage_for_tenant_vim_2_db(self, nfvodb, project_id):
+        # update  total actual resource usage for a project to nfvo db
+        rmlog.info("INFO: resource usage is out of sync, sync total actual resource usage from vim to nfvo db "
+                   "for project: %s", project_id)
+        try:
+            total_actual_usage = self.get_total_usage_for_tenant(nfvodb, project_id)
+            usage_nfvo_db = build_visible_resources_at_nfvo(total_actual_usage['usage'])
+            for resource, value in usage_nfvo_db.items():
+                result = allocated_resource_update(nfvodb, project_id, resource, value, action='SYNC')
+                if not result[0]:
+                    rmlog.error("ERROR: Failure when updating synced usage from vim to nfvo db")
+
+        except exceptions.SyncFailure:
+            raise
+
 
 # implement quota check, quota calculation
 ########################################################
@@ -441,8 +650,6 @@ def loading_allocated_quota_by_flavourId(nfvodb, vnfd_flavor_id):
 
     return allocated
 
-
-
 def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
     '''
     Get number of current using vnfs in a project
@@ -455,13 +662,19 @@ def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
     result, vnfd_using_cnt = nfvodb.update_vnf_using_info_table(vnfd_id, action)
     return result, vnfd_using_cnt
 
+#
+#
+# wish-list in the future
+########################################
+#
+
+
 class DbQuotaDriver(object):
     """Driver to perform check to enforcement of quotas.
 
     Also allows to obtain quota information.
     The default driver utilizes the local database.
     """
-
 
     def commit(self, reservations, project_id=None):
         """Commit reservations.
@@ -727,6 +940,13 @@ def go_main():
 
 if __name__ == "__main__":
 
+    # VimQuotaManager class test
+    region_new_limit = {'nova':{"cores": 80,"ram": 102400, "metadata_items": 800,"key_pairs": 800},'cinder':{"volumes": 80,"snapshots": 80, "gigabytes": 800,"backups": 800},'neutron':{"network":80,"port": 80,"router": 80}}
+    quota_manager = VimQuotaManager()
+    quota_manager.update_quota_limits(project_id='f4211c8eee044bfb9dea2050fef2ace5', region_new_limit=region_new_limit, current_region='RegionOne')
+    quota_manager.get_region_for_project('f4211c8eee044bfb9dea2050fef2ace5')
+
+    # reservation and resource check test
     data = {'reservation_id': '22222',
             'label': 'test4',
             'host_id': "12212817268DJKHSAJD",

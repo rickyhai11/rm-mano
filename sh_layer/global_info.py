@@ -2,6 +2,7 @@ import logging
 
 nlog = logging.getLogger('nfvo')
 vlog = logging.getLogger('vnfm')
+rmlog = logging.getLogger('rm')
 
 config_file = 'playnetmanod.cfg'
 

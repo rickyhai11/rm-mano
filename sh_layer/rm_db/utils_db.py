@@ -616,7 +616,8 @@ class utils_db():
 
     # get a specific resource by uuid or name for a given tenant/project
     # help to check if there is any duplicate rows with (tenant id and uuid or resource name)
-    def _get_resource_by_uuid_name_for_tenant(self, table, tenant_id, uuid_name, error_item_text=None, allow_serveral=False):
+    def _get_resource_by_uuid_name_for_tenant(self, table, tenant_id, uuid_name, error_item_text=None,
+                                              allow_serveral=False):
         ''' Obtain One row from a table based on name or uuid.
         Attribute:
             table: string of table name

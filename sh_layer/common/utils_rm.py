@@ -7,7 +7,6 @@ from sh_layer.common import exceptions
 from sh_layer.rm_monitor.sh_rm_monitoring import *
 from sh_layer.global_info import *
 
-
 # to do validate the quota limits
 def validate_resource_by_name(resource):
     if resource not in itertools.chain(consts.CINDER_QUOTA_FIELDS,
@@ -52,7 +51,8 @@ def load_flavors_from_vim(flavor_id):
 
 def build_db_quota_limit(quotas):
     '''
-    build quota limit dict to store in DB
+    convert quota limit (dict: key as resource name and value as integer)
+    to db format (key as columns and value as column values)
     :param quotas:
     :return:
     '''
@@ -70,9 +70,10 @@ def build_db_quota_limit(quotas):
 
 def build_db_usage_limit(resources, label_update):
     '''
-    build resource usage dict to store in DB
+    convert resource usage (dict: key as resource name and value as integer)
+    to DB format (key as columns and value as column values)
     :param resources: dict {'cpus': 10, 'memory': 1024}
-    :param label_update: enum (in_use, reserved) this fie
+    :param label_update: enum (in_use or reserved)
     :return:usage (dict)
     {'vcpus' : {'resource': 'vcpus', 'in_use': 10}}
     OR
@@ -133,21 +134,98 @@ def build_output_resource_usage(db_resource_usage):
 
     return out_usage
 
+# convert to quota name that is used at vim (openstack)
+# because some quotas are renamed from original name (at vim)
+# such as: vcpu-cores ; ram-vmemory; vnfs-instances
+def build_visible_quota_at_vim(quota_set):
+    # quota_set: dict-with key as resource name and value as value of resource (integer)
+    quota_map = [
+        # compute quota
+        "metadata_items", "cores", "instances", "ram", "key_pairs",
+        "floating_ips", "fixed_ips", "injected_files", 'injected_file_path_bytes',
+        'injected_file_content_bytes', 'security_groups', 'security_group_rules',
+        'server_groups', 'server_group_members'
+        # cinder quota
+        "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
+        # neutron quota
+        "network", "subnet", "port", "router", "floatingip", "security_group", "security_group_rule"]
+
+    different_quota_map = {'vcpus': 'cores', 'vnfs': 'instances', 'vmemory': 'ram'}
+
+    ret = {}
+    # only return visible quota items
+    for k, v in quota_set.iteritems():
+        if k in quota_map:
+            ret[k] = v
+            pass
+        else:
+            for display_name, key_vim in different_quota_map.items():
+                if k == display_name:
+                    ret[key_vim] = v
+    return ret
+
+# mapping resources that are got from vim (openstack) to resource that are renamed to use at nfvo db
+# because some resource are renamed from original name (at vim)
+# such as: vcpu-cores ; ram-vmemory; vnfs-instances
+def build_visible_resources_at_nfvo(vim_resources):
+    # resources: dict-with key as resource name and value as integer from vim
+    resources_map = [
+        # compute quota
+        "metadata_items", "vcpus", "vnfs", "vmemory", "key_pairs",
+        "floating_ips", "fixed_ips", "injected_files", 'injected_file_path_bytes',
+        'injected_file_content_bytes', 'security_groups', 'security_group_rules',
+        'server_groups', 'server_group_members'
+        # cinder quota
+        "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
+        # neutron quota
+        "network", "subnet", "port", "router", "floatingip", "security_group", "security_group_rule"]
+
+    different_quota_map = {'cores': 'vcpus', 'instances': 'vnfs', 'ram': 'vmemory'}
+
+    ret = {}
+    # only return visible quota items
+    for k, v in vim_resources.iteritems():
+        if k in resources_map:
+            ret[k] = v
+            pass
+        else:
+            for display_name, key_vim in different_quota_map.items():
+                if k == display_name:
+                    ret[key_vim] = v
+    return ret
+
 # to calculate resource whether resource usage is increased or decreased
 def resource_calculation(current_value, acquired_value, action):
     '''
     to calculate resource whether resource usage is increased or decreased
     :param current_value: current value that is being stored in db
     :param acquired_value: required resource value that needed to be increased or decreased
-    :param action: (string) (ADD,UPDATE,DELETE)
+    :param action: (string) (ADD,UPDATE,DELETE, SYNC)
     :return:
     '''
+
     if action == 'ADD' or action == 'UPDATE':
         cal_usage = current_value + acquired_value
         return cal_usage
+
     elif action == 'DELETE':
         cal_usage = current_value - acquired_value
         return cal_usage
+
+    elif action == 'SYNC':
+        if current_value > acquired_value:
+            cal_usage = acquired_value  # TODO (ricky) need to re-consider formula
+            return cal_usage
+        elif current_value == acquired_value:
+            cal_usage = current_value
+            return cal_usage
+        # current resource could be lower then actual vim usage as 'in_use' in nfvo db did not include
+        # reserved resources, but otherwise 'in_use' from vim that already included 'reserved' when a reservation
+        # had been started (start time arrived)
+        elif current_value < acquired_value:
+            # cal_usage =  TODO (ricky) need to re-consider formula that involve to reservation
+            return
+
     else:
         nlog.error("ERROR: utils_rm.resource_calculation() - Failed to calculate resource usage")
         return False, None
@@ -164,25 +242,6 @@ def get_batch_projects(batch_size, project_list, fillvalue=None):
     # http://stackoverflow.com/questions/28847334/how-to-unserstand-the-code-using-izip-longest-to-chunk-a-list
     args = [iter(project_list)] * batch_size
     return itertools.izip_longest(fillvalue=fillvalue, *args)
-
-
-def _build_visible_quota(quota_set):
-    quota_map = [
-        'id', 'instances', 'ram', 'cores', 'key_pairs',
-        'floating_ips', 'fixed_ips',
-        'injected_files', 'injected_file_path_bytes',
-        'injected_file_content_bytes',
-        'security_groups', 'security_group_rules',
-        'metadata_items', 'server_groups', 'server_group_members',
-    ]
-
-    ret = {}
-    # only return Nova visible quota items
-    for k, v in quota_set.iteritems():
-        if k in quota_map:
-            ret[k] = v
-
-    return ret
 
 
 def build_absolute_limits(quotas):
@@ -208,10 +267,11 @@ def build_absolute_limits(quotas):
             limits[display_name] = quotas[key]['limit']
     return limits
 
+
 def build_used_limits(quotas):
 
     quota_map = {
-        'totalRAMUsed': 'memory',
+        'totalRAMUsed': 'vmemory',
         'totalCoresUsed': 'vcpus',
         'totalInstancesUsed': 'vnfs',
         'totalFloatingIpsUsed': 'floating_ips',
@@ -227,3 +287,4 @@ def build_used_limits(quotas):
             used_limits[display_name] = quotas[key]['in_use'] + reserved
 
     return used_limits
+
