@@ -14,7 +14,7 @@ from novaclient import client as nClient, exceptions as nvExceptions
 
 from rm_mano.common import todo
 from rm_mano.drivers import vimconn
-from rm_mano.rm_engine.sh_quota_manager import check_user_compute_capacity
+from rm_mano.rm_engine.sh_quota_manager import *
 
 
 class sh_reservation():
