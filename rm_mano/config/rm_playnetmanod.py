@@ -1,4 +1,4 @@
-from rm_mano.rm_engine.sh_quota_manager import *
+from rm_mano.rm_engine.quota_manager import *
 from rm_mano.rm_db.resource_db import *
 
 global global_config
@@ -31,7 +31,7 @@ data = {'reservation_id': '5555',
 if __name__ == "__main__":
 
     try:
-        nfvodb = resource_db.resource_db()
+        nfvodb = Resource_db.resource_db()
         if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
             print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
             exit(-1)
@@ -100,11 +100,11 @@ if __name__ == "__main__":
 
 # def multi_processing_reservations():
 #
-#     sh_rsv = sh_reservation.sh_reservation()
-#     sh_ctrl = sh_reservation.sh_control()
+#     sh_rsv = Reservation.Reservation()
+#     sh_ctrl = Reservation.sh_control()
 #     create_rsv = sh_rsv.create_reservation(nfvodb, data)
 #
-#     sh_reservation.global_config = global_config
+#     Reservation.global_config = global_config
 #     sh_total_quota_manager.global_config = global_config
 #
 #     p1 = multiprocessing.Process(target=process, args=())
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 #     p1.join()
 #     print 'p1 joined'
 #
-#     p2 = multiprocessing.Process(target=sh_reservation.end_time_trigger, args=(nfvodb,))
+#     p2 = multiprocessing.Process(target=Reservation.end_time_trigger, args=(nfvodb,))
 #     p2.start()
 #     print 'p2 started'
 #

@@ -1,12 +1,14 @@
 import sys
 import collections
 import MySQLdb.cursors
+import time
+import datetime
 
 from rm_mano.rm_db.utils_db import *
 from rm_mano.common.utils_rm import *
 
 
-class resource_db(utils_db):
+class Resource_db(utils_db):
 
     def __init__(self):
         utils_db.__init__(self)
@@ -26,9 +28,7 @@ class resource_db(utils_db):
             if user is not None: self.user = user
             if passwd is not None: self.passwd = passwd
             if database is not None: self.database = database
-
-            self.con =mdb.connect(self.host, self.user, self.passwd, self.database)
-
+            self.con = mdb.connect(self.host, self.user, self.passwd, self.database)
             print "DB: connected to %s@%s ---> %s" %(self.user, self.host, self.database)
             return 0
         except mdb.Error, e:
@@ -50,54 +50,201 @@ class resource_db(utils_db):
 
     # Reservation db functions go here
     #####################################################
-    # common adding data to DB table function
-    def add_row_rs(self, table_name, row_dict):
+
+    # def create_reservation(self, project_id, rsv_content):
+    #     # rsv_content is a dictionary with keys as columns and values in reservation db
+    #     r, uuid = self.new_row('resource_usage_rm', INSERT=rsv_content, add_uuid=True, log=False)
+    #     if r > 0:
+    #         # debug only
+    #         print ("INFO: Successful to create a reservation with uuid: '%s'", uuid)
+    #         nlog.info("INFO: Successful to create a reservation")
+    #         return r, uuid
+    #     else:
+    #         print ("ERROR: Failed to create a reservation with uuid: '%s'", uuid)
+    #         nlog.error("ERROR: Failed to create a reservation with uuid: '%s'", uuid)
+    #         return False, None
+
+    def _reservation_create(self, usage_id, project_id, resource, delta, start_time, end_time, expire, vnfd_id):
+
+        INSERT = {'usage_id': usage_id, 'project_id': project_id, 'resource': resource, 'delta': delta,
+                  'start_time': start_time, 'end_time': end_time, 'expire': expire}
+        r, uuid = self.new_row('reservation', INSERT=INSERT, add_uuid=True, log=False)
+        if r > 0:
+
+            # if resource == vnfs (that means that reserving vnfs is requested) then:
+            if resource == 'vnfs':
+
+                # (Pass #1) update reservation uuid and vnfd_id into vnfdid_rsv_rm
+                result, rsv_id, vnfd_id = self.add_vnfdId_and_rsv_id('vnfdid_rsv_rm', uuid, vnfd_id)
+                if result <= 0:
+                    rmlog.error("ERROR: Failure when adding vnfd_id: '%s' and reservation id: '%s' to vnfdid_rsv_rm",
+                                vnfd_id, uuid)
+
+                # # (Pass #2) then update reservation uuid into vnf_rsv_rm table
+                # result, vnf_id = self.add_vnf_id_and_rsv_id('vnf_rsv_rm', reservation_id=uuid, vnf_id=None)
+                # if result <= 0:
+                #     rmlog.error("ERROR: Failure when adding vnf_id: '%s' and reservation id: '%s' to vnfdid_rsv_rm",
+                #                 vnf_id, uuid)
+
+            # debug only
+            print ("INFO: Successful to create a reservation with uuid: '%s'", uuid)
+            nlog.info("INFO: Successful to create a reservation")
+
+            return r, uuid
+        else:
+            print ("ERROR: Failed to create a reservation with uuid: '%s'", uuid)
+            nlog.error("ERROR: Failed to create a reservation with uuid: '%s'", uuid)
+            return False, None
+
+    def reservation_create(self, deltas, expire, start_time, end_time, until_refresh,
+                           project_id, vnfd_id, max_age=None):
+        # this function is invoked by create_reservation() at reservation.py
+        #
+        # 1. if resource is 'vnfs' (that means we want to reserve number of vnfs for a project),
+        # then vnfd_id is required to update into vnfd_id_rsv_rm table along with reservation_id
+        #
+        # 2. max_age is not consider now, so that's why leaving as None by default
+        #
         '''
-        common adding data to DB table function
-        :param table_name:
-        :param row_dict:
-        :return:
+        craete a reservation for a project
+        :param deltas: dict with keys as resource and values as value of resources
+        :param expire: integer - number of second that identify when a reservation should be expire
+        :param start_time: time for starting a reservation
+        :param end_time: time for ending a reservation
+        :param until_refresh: integer number to identify when resource usage need to be synced with vim
+        if until_refresh <=0 ==> sync is required
+
+        :param max_age: integer number to identify maximum time when resource usage is forced to sync with vim
+        :param project_id:
+        :param vnfd_id: vnf desciptor id
+        :return: list of uuid for reservations
         '''
 
-        # self.cursor=self.con.cursor()
-        self.cursor.execute("describe %s" % table_name)
-        self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
-        print self.allowed_keys
-        self.keys = self.allowed_keys.intersection(row_dict)
-        print self.keys
+        # get applicable quota for a project
+        result, db_quotas = self.get_all_quotas_for_tenant(tenant_id=project_id)
+        quotas = collections.defaultdict(dict)
+        for quota in db_quotas:
+            # convert quotas from db to output format with keys as resource and values as value of resources
+            # quotas ={'vcpus': 10, 'vnfs': 10...}
+            quotas = build_output_quota_limit(db_quotas=quota)
+            quotas.update(quotas)
 
-        if len(row_dict) > len(self.keys):
-            unknown_keys = set(row_dict) - self.allowed_keys
-            print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
+        # get applicable resource usage for a project
+        # usages is a dict with keys as resource name and values as dictionary of db fields
+        # usages = {'vcpus': {'uuid': 1562343156, 'project_id': 26735267, 'in_use': 10 ...}}
+        usages = collections.defaultdict(dict)
+        result, db_usages = self.get_resource_usage_for_tenant(project_id)
+        for usage in db_usages:
+            usage_ = build_output_resource_usage(usage)
+            usages.update(usage_)
 
-        columns = ", ".join(self.keys)
-        values_template = ", ".join(["%s"] * len(self.keys))
-        try:
-            sql = "insert into %s (%s) values (%s)" % (
-                table_name, columns, values_template)
-            values = tuple(row_dict[key] for key in self.keys)
+        # Handle usage refresh
+        refresh = False
+        work = set(deltas.keys())
+        while work:
+            resource = work.pop()
 
-            print sql
-            print values
-            self.cursor.execute(sql, values)
-            added = self.cursor.rowcount
+            # Do we need to refresh the usage?
+            if resource not in usages:
+                usages[resource] = self.create_resource_usage_by_name_for_tenant(project_id,resource, 0, 0, until_refresh)
+                refresh = True
+            elif usages[resource]['in_use'] < 0:
+                # Negative in_use count indicates a de-sync, so try to
+                # heal from that...
+                refresh = True
+            elif usages[resource]['until_refresh'] is not None:
+                usages[resource]['until_refresh'] -= 1
+                if usages[resource]['until_refresh'] <= 0:
+                    refresh = True
+            # max_age is integer that specify number of seconds
+            # TODO (ricky) need to handle max_age at here, for now max_age is ignored
+            # elif max_age and usages[resource]['updated_at'] is not None and (
+            #     (usages[resource]['updated_at'] -
+            #         datetime.datetime.utcnow()).seconds >= max_age):
+            #     refresh = True
 
-            # get last added id in a table
-            added_uuid = self.cursor.lastrowid  # Returns the value generated for an AUTO_INCREMENT column
-            # TODO (rickyhai) using existing new_row() in playnetmano if using UUID instead of ID (auto increment)
-            print added_uuid
+            if refresh:
+                # no actual usage refresh here
 
-            self.con.commit()
-            if added > 0:
-                print "Inserted new row successfully"
-                return added, added_uuid
-            else:
-                print "Failed to add a new row into database table: %s" % table_name
-                return added
+                # refresh from the bottom pod
+                usages[resource]['until_refresh'] = until_refresh or None
 
-        except (mdb.Error, AttributeError), e:
-            print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
-            self.con.rollback()
+                # Because more than one resource may be refreshed
+                # by the call to the sync routine, and we don't
+                # want to double-sync, we make sure all refreshed
+                # resources are dropped from the work set.
+                work.discard(resource)
+
+                # NOTE: We make the assumption that the sync
+                #            routine actually refreshes the
+                #            resources that it is the sync routine
+                #            for.  We don't check, because this is
+                #            a best-effort mechanism.
+
+        # Check for deltas that would go negative
+        unders = [r for r, delta in deltas.items()
+                  if delta < 0 and delta + usages[r]['in_use'] < 0]
+
+        # Now, let's check the quotas
+        # NOTE: We're only concerned about positive increments.
+        #            If a project has gone over quota, we want them to
+        #            be able to reduce their usage without any
+        #            problems.
+        overs = [r for r, delta in deltas.items()
+                 if quotas[r] >= 0 and delta >= 0 and
+                 quotas[r] < delta + usages[r]['in_use'] + usages[r]['reserved']]
+
+        # NOTE: The quota check needs to be in the transaction,
+        #            but the transaction doesn't fail just because
+        #            we're over quota, so the OverQuota raise is
+        #            outside the transaction.  If we did the raise
+        #            here, our usage updates would be discarded, but
+        #            they're not invalidated by being over-quota.
+
+        # Create the reservations
+        if not overs:
+            reservations = []
+            for resource, delta in deltas.items():
+                result, reservation_uuid = self._reservation_create(usages[resource]['uuid'], project_id, resource,
+                                                                    delta, start_time, end_time, expire, vnfd_id)
+                # str(uuid.uuid4()) use this one for manually create 'uuid' for reservation
+
+                reservations.append(reservation_uuid)
+
+                # Also update the reserved quantity
+                # NOTE: Again, we are only concerned here about
+                #            positive increments.  Here, though, we're
+                #            worried about the following scenario:
+                #
+                #            1) User initiates resize down.
+                #            2) User allocates a new instance.
+                #            3) Resize down fails or is reverted.
+                #            4) User is now over quota.
+                #
+                #            To prevent this, we only update the
+                #            reserved value if the delta is positive.
+                if delta > 0:
+                    # usages[resource]['reserved'] += delta
+                    self.reserved_record_update(project_id, resource, delta, action='ADD')
+
+        if unders:
+            rmlog.error("Change will make usage less than 0 for the following resources: %s", unders)
+        if overs:
+            usages = {k: dict(in_use=v['in_use'], reserved=v['reserved'])
+                      for k, v in usages.items()}
+            rmlog.error("ERROR: quotas exceed for the resources '%s'", overs)
+            print exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={usages})
+            # raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages=usages)
+
+        return reservations
+
+
+
+
+
+
+
+
 
     # to delete any row from any db tables that associated with reservation ID
     # hence, keep table as argument
@@ -118,7 +265,7 @@ class resource_db(utils_db):
                     print "Delete successfully a reservation: %s " % deleted
                 return deleted
             except (mdb.Error, AttributeError), e:
-                print "resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
+                print "Resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
     # delete a reservation with rsv_id and project_id
     # provide project_id here to be easier when calculate resource usage for a given project
@@ -140,7 +287,7 @@ class resource_db(utils_db):
                     print "Delete successfully a reservation: %s " % deleted
                 return deleted
             except (mdb.Error, AttributeError), e:
-                print "resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
+                print "Resource_db.delete_resource_by_name_uuid_for_project DB Exception %d : %s" % (e.argrs[0], e.args[1])
 
     def update_row_timestamp_by_rsv_id(self, reservation_id, start_time, end_time):
         '''
@@ -163,7 +310,7 @@ class resource_db(utils_db):
                     print "Update successfully a reservation: %s " % updated
                 return updated
             except (mdb.Error, AttributeError), e:
-                print "resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
+                print "Resource_db.update_row DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # unused code
     # def replace_reservation_by_rsv_id(self, table_name, reservation_id, new_values_dict):
@@ -198,7 +345,7 @@ class resource_db(utils_db):
     #                           "in %s table ######" % (deleted, reservation_id, table_name)
     #
     #         except (mdb.Error, AttributeError), e:
-    #             print "resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
+    #             print "Resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # update reservation for a given project
     def update_reservation_for_project(self, project_id, reservation_id, new_values_dict):
@@ -215,7 +362,7 @@ class resource_db(utils_db):
         # result is tuple and result[0] to pickup number of updated rows
         if result[0] <= 0:
             # debug only
-            print "resource_db.update_reservation_for_project:  Failed to update reservation with (update values: '%s' " \
+            print "Resource_db.update_reservation_for_project:  Failed to update reservation with (update values: '%s' " \
                   "and tenant ID: '%s'" % (new_values_dict, project_id)
 
             nlog.error("Error : can't update reservation for (update values ='%s' and tenant ID: '%s')",
@@ -223,7 +370,7 @@ class resource_db(utils_db):
             return False, None
         else:
             # debug only
-            print "resource_db.update_reservation_for_project:  Sucessful to update reservation with (update values: '%s' " \
+            print "Resource_db.update_reservation_for_project:  Sucessful to update reservation with (update values: '%s' " \
                   "and tenant ID: '%s'" % (new_values_dict, project_id)
             nlog.info("Success : update reservation for a tenant/project ID '%s' and update values: '%s'", project_id, new_values_dict)
             return True, result[0]
@@ -233,11 +380,20 @@ class resource_db(utils_db):
 
 
     # vnfTid (vnf_id) DB operations that related to reservation, go here!
+    # NOTICE: ONLY INVOKES THESE FUNCTIONS FOR ADDING VNF_ID AND RESERVATION_ID INTO TABLE 'VNF_RSV_RM'
+    # AFTER RESERVATION HAS BEEN STARTED ALREADY AND VNF(S) HAVE BEEN SUCCESSFULLY INSTANTIATED AT VIM
     ###################################################
 
-    # call this function when vnf(s) are/is created successfully in VIM and vnftid should be updated accordingly
-    #  to associated table 'rsv_vnf_rm'
-    def add_vnf_id_by_rsv_id(self, table_name, reservation_id, vnf_id):
+   need to modify here
+
+    def add_vnf_id_and_rsv_id(self, table, reservation_id, vnf_id=None):
+        # call this function when
+        # 1. reservation for number of 'vnfs' is created successfully but vnf(s) is/are NOT instantiated yet at VIM
+        # Call this function with vnf_id is None to add only reservation id into 'rsv_vnf_rm' table and leave vnf_id as null
+        #
+        #  2. when vnfs are/is confirmed that created successfully at vim vnf_id should be updated
+        # by using update_vnf_id_by_rsv_id()
+
         '''
         to add list of vnf_id from a reservation to table 'rsv_vnf_rm'
         :param talble name: name of table
@@ -246,52 +402,101 @@ class resource_db(utils_db):
         triggered, reservation status "Running" and vnf_id(s) has been instantiated
         :return: result and vnf_id
         '''
-        try:
-            with self.con:
-                self.cur= self.con.cursor()
-                sql = "INSERT INTO %s SET vnf_id='%s', reservation_id ='%s'" % (table_name,
-                                                                                vnf_id, reservation_id)
-                print sql
-                self.cur.execute(sql)
-                added = self.cur.rowcount
-                print "added vnf_id: %s successfully for %s reservation" % (vnf_id, added)
-            return added, vnf_id
-        except (mdb.Error, AttributeError), e:
-            print "resource_db.update_vnfTid_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
+        for retry_ in range(0, 2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor()
+                    sql = "INSERT INTO %s SET vnf_id='%s', reservation_id ='%s'" % (table,
+                                                                                    vnf_id, reservation_id)
+                    print sql
+                    self.cur.execute(sql)
+                    added = self.cur.rowcount
+                    print "added vnf_id: %s successfully for %s reservation" % (vnf_id, added)
+                return added, vnf_id
+            except (mdb.Error, AttributeError), e:
+                print "Resource_db.update_vnf_id_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    # call this function when user would like to update vnfTid in a reservation
-    # vnfTid should be updated accordingly
-    # to associated table 'rsv_vnf_rm'. To do this, consider the following actions:
-    # 1. stop vnf and delete vnf
-    # 2. cache deleted vnfTid
-    # 3. bring up new vnf and get new vnfTid
-    # 4. replace new vnfTid with old vnfTid that regrading to a reservation
-    def update_vnfTid_by_rsv_id(self, table_name, reservation_id, vnf_id, new_vnf_id):
+    # call this function when a reservation ('vnfs' resource is reserved) has already started
+    # and vnfs are already instantiated successfully
+    # then need to update vnf_id into vnf_rsv_rm table with corresponding reservation which was added already previously
+    # (at the time reservation was created in reservation table)
+    #
+    # notice one reservation could be associated with more than one vnf_id(s) in case a number of vnfs within project
+    # are reserved for future use
+
+
+   need to modify here
+
+    def update_vnf_id_by_rsv_id(self, table, reservation_id, vnf_id):
         '''
         to update list of vnf_id from a reservation to table 'rsv_vnf_rm'
-        :param talble_name: name of table
+        :param talble: name of table
         :param reservation_id: esxting reservation in DB
         :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
         triggered, reservation status "Running" and vnf_id(s) has been instantiated
         :return: result and vnf_id
         '''
-        try:
-            with self.con:
-                self.cur= self.con.cursor()
-                sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s' AND vnf_id = '%s' " \
-                      % (table_name, new_vnf_id, reservation_id, vnf_id)
-                print sql
-                self.cur.execute(sql)
-                updated = self.cur.rowcount
-                print "Updated vnf_id: %s successfully for %s reservation" % (vnf_id, updated)
-            return updated, vnf_id
-        except (mdb.Error, AttributeError), e:
-            print "resource_db.update_vnfTid_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
+
+        # first check if record with only reservation_id is filled is present in db
+        result, row = self.get_row_by_vnf_id_rsv_id(reservation_id=reservation_id, vnf_id=None)
+
+        if result <= 0:
+            nlog.error("ERROR: Could not be found appropriate record in vnf_rsv_rm table with "
+                       "reservation id: %s and vnf_id: %s", reservation_id, None)
+            return False, None
+
+        # to handle the case one reservation that associated with more than one vnfs
+        # (reserved amount of vnfs)
+        elif result > 1:
+
+
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur= self.con.cursor()
+                    sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s' AND vnf_id = '%s' " \
+                          % (table, new_vnf_id, reservation_id, vnf_id)
+                    print sql
+                    self.cur.execute(sql)
+                    updated = self.cur.rowcount
+                    print "Updated vnf_id: %s successfully for %s reservation" % (vnf_id, updated)
+                return updated, vnf_id
+            except (mdb.Error, AttributeError), e:
+                print "Resource_db.update_vnf_id_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
+
+
+   need to modify here
+
+    def _get_row_by_vnf_id_rsv_id(self, reservation_id, vnf_id):
+        '''
+        get row with reservation id and vnf id, also to check presence (avoid duplicate)
+        :param reservation_id:
+        :param vnf_id = instance id at vim:
+        :return: result count and row
+        '''
+        for retry_ in range(0,2):
+            try:
+                with self.con:
+                    self.cur = self.con.cursor(mdb.cursors.DictCursor)
+                    self.cur.execute("SELECT * FROM vnf_rsv_rm where reservation_id= '%s' AND vnf_id='%s'"
+                                     % (reservation_id, vnf_id))
+                    row = self.cur.fetchall()
+                    return self.cur.rowcount, row
+            except (mdb.Error, AttributeError), e:
+                nlog.error("nfvo_db.get_row_by_vnfd_id_rsv_id DB Exception %d: %s" % (e.args[0], e.args[1]))
+                r, c = self.format_error(e)
+                if r!=-HTTP_Request_Timeout or retry_ == 1:
+                    return r, c
+
+   need to modify here
+
+    def get_row_by_vnf_id_rsv_id(self, reservation_id, vnf_id):
+        return self._get_row_by_vnf_id_rsv_id(reservation_id, vnf_id)
 
     # vnfdId DB operations, go here
     ###################################################
 
-    def _get_vnfd_id_by_rsv_id(self, reservation_id, vnfdId):
+    def _get_row_by_vnfd_id_rsv_id(self, reservation_id, vnfdId):
         '''
         using to get a specific vnfd_id that associated with a reservation id
         using: to check in vnfdid_rsv_rm table if (reservation_id, vnfdId) is already present
@@ -308,12 +513,12 @@ class resource_db(utils_db):
                     row = self.cur.fetchall()
                     return self.cur.rowcount, row
             except (mdb.Error, AttributeError), e:
-                nlog.error("nfvo_db.get_vnfd_id_by_rsv_id DB Exception %d: %s" % (e.args[0], e.args[1]))
+                nlog.error("nfvo_db.get_row_by_vnfd_id_rsv_id DB Exception %d: %s" % (e.args[0], e.args[1]))
                 r,c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_ == 1:
                     return r,c
 
-    def get_vnfd_id_by_rsv_id(self, reservation_id, vnfd_id):
+    def get_row_by_vnfd_id_rsv_id(self, reservation_id, vnfd_id):
         '''
         using to get a specific vnfd_id that associated with a reservation id
         using: to check in vnfdid_rsv_rm table if (reservation_id, vnfdId) is already present
@@ -321,24 +526,23 @@ class resource_db(utils_db):
         :param vnfd_id:
         :return: result count and row
         '''
-        return self._get_vnfd_id_by_rsv_id(reservation_id, vnfd_id)
+        return self._get_row_by_vnfd_id_rsv_id(reservation_id, vnfd_id)
 
     # this function is called only after a reservation is created to track vnfdId(s) with co-responding reservation(s)
     # n-n relationship between vnf descriptor table and reservation table
-    def add_vnfdId_by_rsv_id(self, table_name, reservation_id, vnfdId):
+    def add_vnfdId_and_rsv_id(self, table_name, reservation_id, vnfdId):
         '''
-        to update list of vnf_id from a reservation to table 'sv_vnf_auth_rm'
-        :param talble_name:
-        :param reservation_id: esxting reservation in DB
-        :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
-        triggered, reservation status "Running" and vnf_id(s) has been instantiated
-        :return: result and vnf_id
+        to add reservation_id adn vnfdId into vnfdid_rsv_rm table
+        :param talble_name: vnfdid_rsv_rm
+        :param reservation_id: existing reservation in DB
+        :param vnfdId : vnf descriptor id
+        :return:
         '''
-        # are existing in the same row in DB table (not duplicated row)
-        result, row = self._get_vnfd_id_by_rsv_id(reservation_id, vnfdId)
-        if result < 0:
-            nlog.error("vnfdId: %s for reservation_id %s is already present in DB" % (vnfdId, reservation_id))
-            return False
+        # checking presence (not duplicated row)
+        result, row = self._get_row_by_vnfd_id_rsv_id(reservation_id, vnfdId)
+        if result > 0:
+            nlog.error("vnfdId: %s for reservation_id %s is already present in DB", vnfdId, reservation_id)
+            return False, None, None
         for retry_ in range(0,2):
             try:
                 with self.con:
@@ -348,29 +552,36 @@ class resource_db(utils_db):
                     print sql
                     self.cur.execute(sql)
                     added = self.cur.rowcount
-                    print "resource_db.add_vnfdId_by_rsv_id() : added vnfdId: %s and reservation_id: %s into " \
+                    print "Resource_db.add_vnfdId_and_rsv_id() : added vnfdId: %s and reservation_id: %s into " \
                           "vnfdid_rsv_info table successfully " % (vnfdId, added)
                 return added, reservation_id, vnfdId
             except (mdb.Error, AttributeError), e:
-                print "resource_db.add_vnfdId_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
+                print "Resource_db.add_vnfdId_and_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    # call this function when updating vnfdId for a reservation by reservation_id
-    # vnfdId should be updated accordingly to associated table 'vnfdid_rsv_info'
-    # TODO (rickyhai) update behaviors when reservation status = 'ACTIVE' and 'INACTIVE' ?
-    def update_vnfdId_by_rsv_id(self, table_name, reservation_id, vnfdId):
+    def update_vnfdId_by_rsv_id(self, table, reservation_id, vnfdId):
+        # call this function when updating vnfdId for a reservation by reservation_id
+        # vnfdId should be updated accordingly to associated table 'vnfdid_rsv_info'
+
+        # TODO (rickyhai) update only  when reservation status is  ='INACTIVE'
+        # that means reservation is not started yet
         '''
         to update list of vnf_id from a reservation to table 'rsv_vnf_auth_rm'
-        :param talble_name:
-        :param reservation_id: esxting reservation in DB
-        :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
-        triggered, reservation status "Running" and vnf_id(s) has been instantiated
+        :param talble_name: db table
+        :param reservation_id: reservation id (uuid field actually) in DB (this field is unique)
+        :param vnfdId = vnf descriptor
         :return: result and vnf_id
         '''
-        for retry_ in range(0,2):
+        # checking presence (not duplicated row)
+        result, row = self.get_rsv_by_id(table, reservation_id)
+        if result > 1 or result < 0:
+            nlog.error("ERROR: more than one record have been found or nothing found" % vnfdId, reservation_id)
+            return False, None
+
+        for retry_ in range(0, 2):
             try:
                 with self.con:
                     self.cur= self.con.cursor()
-                    sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s'" % (table_name,
+                    sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s'" % (table,
                                                                                      vnfdId, reservation_id)
                     print sql
                     self.cur.execute(sql)
@@ -378,11 +589,11 @@ class resource_db(utils_db):
                     print "Updated vnf_id: %s successfully for %s reservation" % (vnfdId, updated)
                 return updated, vnfdId
             except (mdb.Error, AttributeError), e:
-                print "resource_db.update_vnfdId_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
+                print "Resource_db.update_vnfdId_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # get a specific reservation in a given project by reservation ID
     # don't need to use project_id in query condition as reservation_id is unique in system
-    def get_rsv_by_id(self, reservation_id):
+    def get_rsv_by_id(self, table, reservation_id):
         '''
         this function is to query a specific reservation in a given project with reservation_id
         :param reservation_id:
@@ -391,17 +602,15 @@ class resource_db(utils_db):
         for retry_ in range(0,2):
             try:
                 with self.con:
-                    self.cur= self.con.cursor(MySQLdb.cursors.DictCursor)
-                    sql = "SELECT * FROM reservation WHERE reservation_id= '%s'" % reservation_id
+                    self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
+                    sql = "SELECT * FROM %s WHERE reservation_id= '%s'" % (table, reservation_id)
                     self.cur.execute(sql)
                     rows = self.cur.fetchone()
                     listed = self.cur.rowcount
                     print "query reservation with id %s successfully" % reservation_id
-                    #print listed
-                    print rows['reservation_id']
                     return listed, rows
             except(mdb.Error, AttributeError), e:
-                print "resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
+                print "Resource_db.get_rsv_by_id DB exception %d: %s" % (e.args[0], e.args[1])
                 return False, None
 
     # get list of reservations for a given project
@@ -439,7 +648,7 @@ class resource_db(utils_db):
                 #print list_rsv
                 return list_rsv
         except(mdb.Error, AttributeError), e:
-            print "resource_db.get_rsv_by_status DB exception %d: %s" % (e.args[0], e.args[1])
+            print "Resource_db.get_rsv_by_status DB exception %d: %s" % (e.args[0], e.args[1])
 
     # identify reservation is expired , then deleted reservation record in db and update "reserved" columns
     # which regard to resources in resource usage table
@@ -448,67 +657,40 @@ class resource_db(utils_db):
         return rsv_id
 
 
+
+
+
+
+
+
+
     # Quota Management DB operations, go here
     #####################################################
-    def replace_row_by_uuid_composite(self, table_name, uuid, new_values_dict):
-        '''
-        Removes the old one (based on uuid) and adds the new values for resource capacity tables (vcpu, vmem,vdisk, network etc...)
-        Attribute
-        :param table_name: table where to insert
-        :param uuid: input uuid that using to del
-        :param new_values_dict: is a dictionary with format as below (included new 'uuid' field)
-            vcpu={'uuid': 13,"cpu_total": 15, "vcpu_total" : 20,"vcpu_used": 10, "cpu_available": 8, "vcpu_available":65}
-        :return: (delete, new_uuid)
-        '''
-        try:
-            with self.con:
-                self.cur= self.con.cursor()
-                sql = "DELETE FROM %s WHERE uuid= '%s'" % (table_name, uuid)
-                # print sql
-                self.cur.execute(sql)
-                deleted = self.cur.rowcount
-                #print deleted
-                if deleted > 0 and new_values_dict:
-                    print "Deleted successfully next step --> adding new values"
-                    self.add_row_rs(table_name, new_values_dict)
-                    print "Updated new values into %s table successfully" % table_name
-                    #new_uuid = new_values_dict['uuid']
-
-                    return deleted #new_uuid
-
-                else:
-                    print "Failed to delete previous values in db ######'%s row has been deleted'###### OR " \
-                          "###### 'uuid': %s was not existing " \
-                          "in %s table ######" % (deleted, uuid, table_name)
-
-        except (mdb.Error, AttributeError), e:
-            print "resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
 
     # Create a resource usage by name for a given tenant
     # (using with reservation operations probably, for instance: after create reservation --> call this )
     def create_resource_usage_by_name_for_tenant(self, tenant_id, resource, in_use, reserved,
-                                                 util_refresh=False):
+                                                 until_refresh):
         '''
         Create resource usage for a specific resource in a given tenant/project
         :param tenant_id:
         :param resource: : resource name
         :param in_use: value of in_use corresponding resource;
         :param reserved: value of reserved corresponding resource;
-        :param until_refresh: False- not need to refresh resource usage yet (in mysql until_refresh =0)
-        True: need to refresh resource usage (in mysql until_refresh =1)
+        :param until_refresh: (integer) number of seconds when resources will be synced with vim
+        details related when resource will be synced is described in reservation_create() function
         :return: resource usage that is created successfully
         '''
-        # TODO (rickyhai) need to implement when we need to refresh resource usage (util_refresh=True) ?
 
         # First check if there are any duplicate rows with corresponding project id and resource in db
         nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
-                                                             uuid_name=resource, error_item_text=None,
+                                                                    uuid_name=resource, error_item_text=None,
                                                                     allow_serveral=True)
         # print nb_rows
         # if there are no duplicates in db
         if nb_rows == 0:
             # create + store resource usage in DB for a specific resource in a given tenant
-            usage_sync = {'project_id': tenant_id, 'resource': resource, 'in_use': in_use, 'reserved': reserved, 'util_refresh': util_refresh}
+            usage_sync = {'project_id': tenant_id, 'resource': resource, 'in_use': in_use, 'reserved': reserved, 'until_refresh': until_refresh}
             r, uuid = self.new_row('resource_usage_rm', INSERT=usage_sync, add_uuid=True, log=False)
             if r > 0:
                 # debug only
@@ -521,21 +703,21 @@ class resource_db(utils_db):
                 print ("ERROR: Failed to add a specific resource usage (resource name: '%s' and project ID '%s') "
                        "into resource usage table" % (resource, tenant_id))
                 nlog.error("ERROR: Failed to add a specific resource usage (resource name: '%s' and project ID '%s') "
-                          "into resource usage table", resource, tenant_id)
+                           "into resource usage table", resource, tenant_id)
                 return False, None
         # if number of rows > 0 --> row is already present
         elif nb_rows > 0:
             print ("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is already present"
-                       "in resource usage table" % (resource, tenant_id))
+                   "in resource usage table" % (resource, tenant_id))
             nlog.error("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is already present"
-                          "in resource usage table", resource, tenant_id)
+                       "in resource usage table", resource, tenant_id)
             return False, None
         # if number of rows is not integer
         else:
             print ("ERROR: Failed to check the presence of a specific resource(resource name: '%s' and project ID '%s') "
-                       "from resource usage table" % (resource, tenant_id))
+                   "from resource usage table" % (resource, tenant_id))
             nlog.error("ERROR: Failed to check the presence of a specific resource(resource name: '%s' and project ID '%s') "
-                          "from resource usage table", resource, tenant_id)
+                       "from resource usage table", resource, tenant_id)
             return False, None
 
     # # update a specific resource usage in a given project/tenant by name + using dict actual_usage as input data
@@ -549,7 +731,9 @@ class resource_db(utils_db):
     #         # (1) to update DB after manually calculating resource usage ( with per resource request)
     #         # (1) actual_usage = {'in_use': actual_usage['in_use'], 'reserved': actual_usage['reserved']}
     #         #
-    #         # (2) to update DB after resource usage sync from VIM (until_refresh flag =True)
+    #         # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds
+    #               when resources will be synced with vim
+    #               details related when resource will be synced is described in reservation_create() function)
     #         # (2) actual_usage = {'in_use': actual_usage['in_use']}
     #         where_info = {'project_id': tenant_id, 'resource': resource}
     #         _, result = self.update_rows('resource_usage_rm', UPDATE=actual_usage, WHERE=where_info, log=True)
@@ -566,32 +750,34 @@ class resource_db(utils_db):
     # This function is invoked for handle api request in case user would like to update
     # a specific resource usage intentionally from explicit project
     def update_resource_usage_by_name_for_tenant(self, tenant_id, resource, in_use, reserved,
-                                                 until_refresh=False):
+                                                 until_refresh):
         '''
         update a specific resource by name for a given tenant
         :param tenant_id:
         :param resource: name
         :param in_use: value
         :param reserved: value
-        :param until_refresh: False or True: resource need to be refreshed/synced or not
+        :param until_refresh: (integer) number of seconds that is amount of time resources
+        will be refreshed or synced with vim (integer)
+        details related when resource will be synced is described in reservation_create() function
         :return:
         '''
         # use cases (1) or (2):
         # (1) to update DB after manually calculating resource usage ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
+        # (2) to update DB after resource usage sync from VIM (until_refresh = number of seconds that resources will be synced)
         #
         # First check if there are any duplicate rows with corresponding project id and resource in db
         nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
-                                                             uuid_name=resource, error_item_text=None,
-                                                             allow_serveral=True)
+                                                                    uuid_name=resource, error_item_text=None,
+                                                                    allow_serveral=True)
         # print nb_rows
         # if there is no record in db regarding to that resource and tenant
         if nb_rows == 0:
             # passing number of row = 0 to trigger create new record for correspond resource
             print ("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
-                       "in resource usage table" % (resource, tenant_id))
+                   "in resource usage table" % (resource, tenant_id))
             nlog.error("ERROR: Resource usage with (resource name: '%s' and project ID '%s') is NOT present"
-                          "in resource usage table", resource, tenant_id)
+                       "in resource usage table", resource, tenant_id)
             return nb_rows
 
         # if number of rows > 1 --> row is already present and trigger update operation
@@ -612,9 +798,9 @@ class resource_db(utils_db):
         # if number of rows is not integer
         else:
             print ("ERROR: Failed to check presence of a specific resource (resource name: '%s' and project ID '%s') "
-                       "from resource usage table" % (resource, tenant_id))
+                   "from resource usage table" % (resource, tenant_id))
             nlog.error("ERROR: Failed to check presence of a specific resource (resource name: '%s' and project ID '%s') "
-                          "from resource usage table", resource, tenant_id)
+                       "from resource usage table", resource, tenant_id)
             # return False, None
 
     ######################################################
@@ -646,7 +832,7 @@ class resource_db(utils_db):
 
         # use cases (1) or (2):
         # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
+        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds when resource will be synced with vim )
         #
         # First get current resource usage and
         # check if there are any duplicate rows with corresponding project id and resource in db
@@ -729,7 +915,8 @@ class resource_db(utils_db):
 
         # use cases (1) or (2):
         # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (util_refresh flag =True)
+        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds when resources will be synced with vim
+        #     details related when resource will be synced is described in reservation_create() function)
         #
         # First get current resource usage and
         # check if there are any duplicate rows with corresponding project id and resource in db
@@ -908,13 +1095,13 @@ class resource_db(utils_db):
             result, uuid = self.new_row('quota_rm', INSERT=quotas_data[resource], add_uuid=True, log=False)
             if result <= 0:
                 # debug only
-                print "resource_db.create_all_quotas_for_tenant: Failed to create quota limit " \
+                print "Resource_db.create_all_quotas_for_tenant: Failed to create quota limit " \
                       "with (resource '%s' and tenant ID '%s')" % (resource, tenant_id)
                 nlog.error("Error : can't create quota for (resource ='%s' for tenant ID '%s')", resource, tenant_id)
                 # return False, None # Not used to avoid break
             else:
                 # debug only
-                print "resource_db.create_all_quotas_for_tenant: Successful to create quota limit " \
+                print "Resource_db.create_all_quotas_for_tenant: Successful to create quota limit " \
                       "with (resource '%s' and tenant ID '%s')" % (resource, tenant_id)
                 nlog.info("Success : _create quotas for a tenant/project ID '%s'in quota db", tenant_id)
 
@@ -923,8 +1110,8 @@ class resource_db(utils_db):
                 #
                 # First check if there are any duplicate rows with corresponding project id and resource in db
                 nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
-                                                                     uuid_name=resource, error_item_text=None,
-                                                                     allow_serveral=True)
+                                                                            uuid_name=resource, error_item_text=None,
+                                                                            allow_serveral=True)
                 # print nb_rows
                 # if there are no duplicates in db
                 if nb_rows == 0:
@@ -980,14 +1167,14 @@ class resource_db(utils_db):
             print result[0]
             if result[0] <= 0:
                 # debug only
-                print "resource_db.update_all_quotas_for_tenant:  Failed to update quota limit with (resource '%s' " \
+                print "Resource_db.update_all_quotas_for_tenant:  Failed to update quota limit with (resource '%s' " \
                       "and tenant ID '%s'" % (resource, tenant_id)
 
                 nlog.error("Error : can't update quotas for (resource ='%s' for tenant ID '%s')", resource, tenant_id)
                 # return False, None
             else:
                 # debug only
-                print "resource_db.update_all_quotas_for_tenant:  Sucessful to update quota limit with (resource '%s' " \
+                print "Resource_db.update_all_quotas_for_tenant:  Sucessful to update quota limit with (resource '%s' " \
                       "and tenant ID '%s'" % (resource, tenant_id)
                 nlog.info("Success : update quotas for a tenant/project ID '%s'", tenant_id)
         print "Print result out of for loop: result[0] = %d" % result[0]  # TODO(ricky) disable when finish debug
@@ -1029,7 +1216,7 @@ class resource_db(utils_db):
         :return: dict- quota for that resource
         '''
         result, quota = self._get_resource_by_uuid_name_for_tenant('quota_rm', tenant_id=tenant_id, uuid_name=resource,
-                                                                            error_item_text=None, allow_serveral=False)
+                                                                   error_item_text=None, allow_serveral=False)
         if result <= 0:
             nlog.error("Error : can't get quota from DB by uuid or resource name with "
                        "(uuid/resource name =%s in tenant ID '%s')", resource, tenant_id)
@@ -1094,7 +1281,7 @@ class resource_db(utils_db):
     #                 print "###### 'uuid': %s was not existing in %s table ######" % (uuid, table_name)
     #
     #     except (mdb.Error, AttributeError), e:
-    #         print "resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
+    #         print "Resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
 
     def get_row_by_uuid_composite(self, table_name, uuid):
         try:
@@ -1109,7 +1296,7 @@ class resource_db(utils_db):
                 print rows
                 return listed, rows
         except(mdb.Error, AttributeError), e:
-            print "resource_db.get_row_by_uuid_composite DB exception %d: %s" % (e.args[0], e.args[1])
+            print "Resource_db.get_row_by_uuid_composite DB exception %d: %s" % (e.args[0], e.args[1])
 
     def get_all_rows_for_table_composite(self, table_name):
         try:
@@ -1124,91 +1311,93 @@ class resource_db(utils_db):
                 print " query all of %s table successfully" % table_name
                 return listed, rows
         except(mdb.Error, AttributeError), e:
-            print "resource_db.get_all_rows_for_table_composite DB exception %d: %s" % (e.args[0], e.args[1])
-
-    # ************************************************************
-    # Old codes - users and tenants based - resources management- basic DB operations. Go here
-    # ***********************************************************
-
-    def get_newest_row_by_timestamp_userid_tenantid(self, table_name, user_id, tenant_id):
-        '''
-        This function is used to query a latest row from users utilization resources tables such as: users_util_compute_rm or users_util_network_rm
-        get one row that store current availability of resources, where the selected row has the most recent timestamp
-        and co-responding to user_id in given tenant_id (to guarantee the unique and latest oof returned row)
-        :param table_name:
-        :param rsv:
-        :return:
-        '''
-        try:
-            with self.con:
-                self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
-                sql = "SELECT * FROM (SELECT * FROM %s WHERE user_id='%s' and tenant_id='%s' ORDER BY modified_at DESC LIMIT 1) A GROUP BY modified_at, uuid" \
-                      % (table_name, user_id, tenant_id)
-                print sql
-                self.cur.execute(sql)
-                row = self.cur.fetchall()
-                listed = self.cur.rowcount
-                # for row in rows:   # for debug
-                #     print row
-                print " Query latest row in %s table with user-id: %s and tenant-id: %s successfully" % (table_name, user_id, tenant_id)
-                # Print out uuid
-                # print rows[0]['uuid']
-                return listed, row
-        except(mdb.Error, AttributeError), e:
-            print "resource_db.get_all_rows_for_table_composite DB exception %d: %s" % (e.args[0], e.args[1])
+            print "Resource_db.get_all_rows_for_table_composite DB exception %d: %s" % (e.args[0], e.args[1])
 
 
-    def __add_row_by_userid_tenantid(self, table_name, user_id, tenant_id, row_dict):
-        ''' add_row_resources could be used like global adding function for adding any data with dict/json format to DB
-        for example:
-            if Add a new reservation to reservation table
-            input parameters:
-                table_name: name of table in mySQL DB
-                rowdict: dictionary that include attributes regarding to kind of resource
-        '''
 
-        self.con
-        self.cursor = self.con.cursor()
-        self.cursor.execute("describe %s" % table_name)
-        self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
-        self.keys = self.allowed_keys.intersection(row_dict)
+            # ************************************************************
+            # Old codes - users and tenants based - resources management- basic DB operations. Go here
+            # ***********************************************************
 
-        if len(row_dict) > len(self.keys):
-            unknown_keys = set(row_dict) - self.allowed_keys
-            print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
-
-        columns = ", ".join(self.keys)
-        values_template = ", ".join(["%s"] * len(self.keys))
-        try:
-            sql = "insert into %s (%s) values (%s)" % (
-                table_name, columns, values_template)
-            values = tuple(row_dict[key] for key in self.keys)
-            print sql
-            print values
-            self.cursor.execute(sql, values)
-            added = self.cursor.rowcount
-            # get last added id in a table
-            added_uuid = self.cursor.lastrowid  # Returns the uuid value that is generated as AUTO_INCREMENT attribute
-            print added_uuid
-            self.con.commit()
-            if added > 0:
-
-                print "Inserted new row successfully"
-                return added, added_uuid
-            else:
-                print "Failed to add a new row into database table: %s" % table_name
-                return added
-
-        except (mdb.Error, AttributeError), e:
-            print "resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
-            self.con.rollback()
+            # def get_newest_row_by_timestamp_userid_tenantid(self, table_name, user_id, tenant_id):
+            #     '''
+            #     This function is used to query a latest row from users utilization resources tables such as: users_util_compute_rm or users_util_network_rm
+            #     get one row that store current availability of resources, where the selected row has the most recent timestamp
+            #     and co-responding to user_id in given tenant_id (to guarantee the unique and latest oof returned row)
+            #     :param table_name:
+            #     :param rsv:
+            #     :return:
+            #     '''
+            #     try:
+            #         with self.con:
+            #             self.cur = self.con.cursor(MySQLdb.cursors.DictCursor)
+            #             sql = "SELECT * FROM (SELECT * FROM %s WHERE user_id='%s' and tenant_id='%s' ORDER BY modified_at DESC LIMIT 1) A GROUP BY modified_at, uuid" \
+            #                   % (table_name, user_id, tenant_id)
+            #             print sql
+            #             self.cur.execute(sql)
+            #             row = self.cur.fetchall()
+            #             listed = self.cur.rowcount
+            #             # for row in rows:   # for debug
+            #             #     print row
+            #             print " Query latest row in %s table with user-id: %s and tenant-id: %s successfully" % (table_name, user_id, tenant_id)
+            #             # Print out uuid
+            #             # print rows[0]['uuid']
+            #             return listed, row
+            #     except(mdb.Error, AttributeError), e:
+            #         print "Resource_db.get_all_rows_for_table_composite DB exception %d: %s" % (e.args[0], e.args[1])
+            #
+            #
+            # def __add_row_by_userid_tenantid(self, table_name, user_id, tenant_id, row_dict):
+            #     ''' add_row_resources could be used like global adding function for adding any data with dict/json format to DB
+            #     for example:
+            #         if Add a new reservation to reservation table
+            #         input parameters:
+            #             table_name: name of table in mySQL DB
+            #             rowdict: dictionary that include attributes regarding to kind of resource
+            #     '''
+            #
+            #     self.con
+            #     self.cursor = self.con.cursor()
+            #     self.cursor.execute("describe %s" % table_name)
+            #     self.allowed_keys = set(row[0] for row in self.cursor.fetchall())
+            #     self.keys = self.allowed_keys.intersection(row_dict)
+            #
+            #     if len(row_dict) > len(self.keys):
+            #         unknown_keys = set(row_dict) - self.allowed_keys
+            #         print >> sys.stderr, "skipping keys:", ", ".join(unknown_keys)
+            #
+            #     columns = ", ".join(self.keys)
+            #     values_template = ", ".join(["%s"] * len(self.keys))
+            #     try:
+            #         sql = "insert into %s (%s) values (%s)" % (
+            #             table_name, columns, values_template)
+            #         values = tuple(row_dict[key] for key in self.keys)
+            #         print sql
+            #         print values
+            #         self.cursor.execute(sql, values)
+            #         added = self.cursor.rowcount
+            #         # get last added id in a table
+            #         added_uuid = self.cursor.lastrowid  # Returns the uuid value that is generated as AUTO_INCREMENT attribute
+            #         print added_uuid
+            #         self.con.commit()
+            #         if added > 0:
+            #
+            #             print "Inserted new row successfully"
+            #             return added, added_uuid
+            #         else:
+            #             print "Failed to add a new row into database table: %s" % table_name
+            #             return added
+            #
+            #     except (mdb.Error, AttributeError), e:
+            #         print "Resource_db.add_row_rs DB Exception %d : %s" % (e.args[0], e.args[1])
+            #         self.con.rollback()
 
 ####################################################################################################################
 # main function for testing above code
 ####################################################################################################################
 
 if __name__ == '__main__':
-    db = resource_db.resource_db()
+    db = Resource_db.resource_db()
     # a = db.connect(host="116.89.184.43", user="root", passwd="", database="mano_db")
 
     # actual_usage = {'in_use': 4, 'reserved': 2}
@@ -1218,7 +1407,7 @@ if __name__ == '__main__':
     # print c
     # print r
     # where = {'uuid': 20}
-    # dat_table = db.update_vnfTid_by_rsv_id('rsv_vnf_rm', '23762sbdhgwshdg', 'sjhdgsjdh121' , 'haiupdated')
+    # dat_table = db.update_vnf_id_by_rsv_id('rsv_vnf_rm', '23762sbdhgwshdg', 'sjhdgsjdh121' , 'haiupdated')
     # print dat_table
 
     # sample input from other modules

@@ -23,5 +23,3 @@ HTTP_Playnet_Fail = 440     # Unassigned HTTP Error Code : 432 ~ 450
 
 HTTP_Internal_Server_Error = 500
 HTTP_Service_Unavailable = 503
-
-

@@ -3,6 +3,28 @@ Reservation, All function are related to reservation service should be implement
 NFVO API or RM API modules
 '''
 
+'''
+Table: reservation
+Columns:
+reservation_id int(36) AI PK
+uuid varchar(36)
+usage_id varchar(36)
+label varchar(100)
+region_id varchar(36)
+user_id varchar(36)
+project_id varchar(36)
+resource varchar(36)
+delta int(20)
+start_time datetime
+end_time datetime
+expire datetime
+status enum('ACTIVE','INACTIVE','BUILD','ERROR')
+created_at datetime
+updated_at datetime
+deleted_at datetime
+summary varchar(300)
+
+'''
 import datetime
 import time
 
@@ -14,23 +36,49 @@ from novaclient import client as nClient, exceptions as nvExceptions
 
 from rm_mano.common import todo
 from rm_mano.drivers import vimconn
-from rm_mano.rm_engine.sh_quota_manager import *
+from rm_mano.rm_engine.quota_manager import *
 
+#
+# global parameter go here
+#
+# number of seconds:  when util_refresh goes down to zero, that means that resource need to be refreshed
+until_refresh_default = 7200
 
-class sh_reservation():
+# number of seconds which identify when a reservation should be expired
+# if for some reasons reservation does not start or end
+expire_default = 300
+
+class Reservation():
+
     def __init__(self):
-        todo
+        pass
 
-    def create_reservation(self, nfvodb, rsv_content):
-        print "Checking available resources. Please be patient..."
-        rp = check_user_compute_capacity(mydb=nfvodb, rsv=rsv_content)
-        if rp:
-            result = nfvodb.add_row_rs('reservation', rsv_content)
-            if result > 0:
-                print "created reservation successfully "
-                return result
-        else:
-            print 'Resources error occurred: resources are exhausted. Please recheck'
+    def create_reservation(self, nfvodb, deltas, expire, start_time, end_time,
+                           until_refresh, project_id, vnfd_id=None):
+
+        # Set up the reservation expiration
+        if expire is None:
+            expire = expire_default
+        if isinstance(expire, six.integer_types):
+            expire = datetime.timedelta(seconds=expire)
+        if isinstance(expire, datetime.timedelta):
+            # consider to use utcnow() by default or using now()
+            # expire = datetime.datetime.utcnow() + expire
+            expire = datetime.datetime.now() + expire
+        if not isinstance(expire, datetime.datetime):
+            rmlog.error("ERROR: invalid reservation expiration")
+            print exceptions.InvalidReservationExpiration(expire=expire)
+
+        reservation_uuids = nfvodb.reservation_create(deltas, expire, start_time, end_time,
+                                                      until_refresh, project_id, vnfd_id, None)
+        return reservation_uuids
+
+
+
+
+
+
+
 
     def delete_reservation(self, table, nfvodb, reservation_id):
         result = nfvodb.delete_row_by_rsv_id(table=table, reservation_id=reservation_id)
@@ -42,7 +90,7 @@ class sh_reservation():
         result, reservation_id = nfvodb.update_reservation_for_project(table_name='reservation', reservation_id=reservation_id,
                                                                        new_values_dict=new_values_dict)
         if result > 0:
-            print "sh_reservation.update_reservation() - updated reservation successfully"
+            print "Reservation.update_reservation() - updated reservation successfully"
             return result, reservation_id
 
     def update_time_stamp_reservation(self, nfvodb, reservation_id, start_time, end_time):
@@ -72,7 +120,7 @@ class sh_control():
     def start_time_trigger(self, nfvodb):
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
                                                   url_admin="", user="admin", passwd="fncp2015")
-        reservations = sh_reservation()
+        reservations = Reservation()
         print "start_time_trigger process is running"
         rsv_vnf_auth_dict = {}
         while True:
@@ -102,7 +150,7 @@ class sh_control():
 
         nproject = vimconnector(uuid="", name="", tenant="admin", url="http://129.254.39.209:5000/v2.0",
                                                   url_admin="", user="admin", passwd="fncp2015")
-        reservations = sh_reservation()
+        reservations = Reservation()
         print "end_time_trigger process is running"
         while True:
             rsvs = reservations.list_all_created_rsv(nfvodb)

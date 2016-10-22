@@ -1,10 +1,10 @@
 '''
+
 author: rickyhai
 dcnlab
 nguyendinhhai11@gmail.com
-Implemetation capacity management
-
 Quota Management and Resource Usage are implemented here and they are used by NFVO API or RM API modules
+
 '''
 
 # Quota Manger class imports
@@ -46,11 +46,11 @@ def create_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved,
     True: need to refresh resource usage
     :return: resource usage that is created successfully
     '''
-    return nfvodb.create_resource_usage_by_name_for_tenant(tenant_id, resource, in_use, reserved,  until_refresh=False)
+    return nfvodb.create_resource_usage_by_name_for_tenant(tenant_id, resource, in_use, reserved,  until_refresh)
 
 # Update resource usage for specific project/tenant
 # TODO(rickyhai) consider if this function is needed at here
-def update_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved, until_refresh=False):
+def update_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved, until_refresh):
     '''
     update resource usage by name of resource for a given tenant/project
     :param nfvodb:
@@ -62,7 +62,7 @@ def update_resource_usage_by_name(nfvodb, tenant_id, resource, in_use, reserved,
     :return: result
     '''
     # until_refresh is set False by default
-    return nfvodb.update_resource_usage_by_name_for_tenant(tenant_id, resource, in_use, reserved, until_refresh=False)
+    return nfvodb.update_resource_usage_by_name_for_tenant(tenant_id, resource, in_use, reserved, until_refresh)
 
 def get_resource_usage(nfvodb, tenant_id):
     '''
@@ -205,11 +205,11 @@ def get_quotas_for_project(nfvodb, project_id):
 
     try:
         # Get quota limit for a given tenant/project in DB
-        result, resource_usage = nfvodb.get_all_quotas_for_tenant(tenant_id=project_id)
+        result, quotas_db = nfvodb.get_all_quotas_for_tenant(tenant_id=project_id)
         quotas_output = {}
-        for usage in resource_usage:
-            quotas_out = build_output_quota_limit(db_quotas=usage)
-            quotas_output.update(quotas_out)
+        for quota in quotas_db:
+            quotas = build_output_quota_limit(db_quotas=quota)
+            quotas_output.update(quotas)
         return quotas_output
     except exceptions.ProjectQuotaNotFound:
         nlog.error('ERROR: project/tenant ID %s is not found in DB', project_id)
@@ -478,15 +478,16 @@ class VimQuotaManager():
 # implement quota check, quota calculation
 ########################################################
 
-# check availability for resource(s) in a given project
+
 def available_resource_check_for_project(nfvodb, values, project_id=None):
+    # check availability for resource(s) in a given project
     '''
-    checking availability for resource(s) in a given project based on assigned quota
-    :param nfvodb: db object
-    :param values: (dict) keys/values of resource(s) that are used for check
-    :param project_id:  specific a given project
-    :return:
-    '''
+        checking availability for resource(s) in a given project based on assigned quota
+        :param nfvodb: db object
+        :param values: (dict) keys/values of resource(s) that are used for check
+        :param project_id:  specific a given project
+        :return:
+        '''
     # get applicable quota for a project
     quotas = get_quotas_for_project(nfvodb, project_id)
 
@@ -497,29 +498,33 @@ def available_resource_check_for_project(nfvodb, values, project_id=None):
     flag = False
 
     # Get unused quotas
-    un_used_resource = set(quotas.keys()).difference(set(values.keys()))
-    print un_used_resource
+    # un_used_resource = set(quotas.keys()).difference(set(values.keys()))
+    # print un_used_resource
 
     # Check for deltas that would go negative
-    unders = [r for r, delta in values.items()
-              if delta < 0 and delta + rs_usage[r]['in_use'] < 0]
+    unders = [r for r, val in values.items()
+              if val < 0 and val + rs_usage[r]['in_use'] < 0]
+    if unders:
+        rmlog.error("Change will make usage less than 0 for the following resources: %s", unders)
 
     # check the quotas
     # We're only concerned about positive increments.
     # If a project has gone over quota, we want them to
     # be able to reduce their usage without any problems.
-    overs = [r for r, delta in values.items()
-             if quotas[r] >= 0 and delta >= 0 and
-             quotas[r] <= delta + rs_usage[r]['in_use'] + rs_usage[r]['reserved']]
+    overs = [r for r, val in values.items()
+             if quotas[r] >= 0 and val >= 0 and
+             quotas[r] <= val + rs_usage[r]['in_use'] + rs_usage[r]['reserved']]
 
     if overs:
         flag = False
-        nlog.error("ERROR: quotas exceed for the resources '%s'")
-        raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
+        rmlog.error("ERROR: quotas exceed for the resources '%s'", overs)
+        print exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
         return flag
     else:
         flag = True
+        rmlog.info("INFO: Resources: '%s' is sufficient", overs)
         return flag
+
 
 def available_check_specific_resource_for_project(nfvodb, resource, project_id=None):
     # TODO (rickyhai) need to implement
@@ -570,6 +575,7 @@ def limit_check(nfvodb, values, project_id=None):
         nlog.error("ERROR: quotas exceed for the resources '%s'", overs)
         raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas, usages={})
 
+
 def allocated_resource_update(nfvodb, project_id, resource, allocated, action):
     '''
     when resource allocation change is made, then we need to update 'in_use' value for a specific resource
@@ -585,6 +591,7 @@ def allocated_resource_update(nfvodb, project_id, resource, allocated, action):
     '''
 
     return nfvodb.in_use_record_update(project_id=project_id, resource=resource, in_use=allocated, action=action)
+
 
 def reserved_resource_update(nfvodb, project_id, resource, reserved, action):
     '''
@@ -602,6 +609,7 @@ def reserved_resource_update(nfvodb, project_id, resource, reserved, action):
 
     return nfvodb.reserved_record_update(project_id=project_id, resource=resource, reserved=reserved, action=action)
 
+
 def get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
 
     # get flavour info from flavour_info table
@@ -616,16 +624,17 @@ def get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id):
         resources['gigabytes'] = content['storageSize']
         return resources
 
-# get number of vnfs in a reservation dict
-# return a dict of reserved quota  after calculating with below formula:
-# reserved = number of vnfs * flavor_detail
-def loading_reserved_quota_by_flavourId(nfvodb, vnfd_flavor_id, number_vnfs):
+
+def loading_reserved_quota_by_flavour_id(nfvodb, vnfd_flavor_id, number_vnfs):
+    # get number of vnfs in a reservation dict
+    # return a dict of reserved quota  after calculating with below formula:
+    # reserved = number of vnfs * flavor_detail
     '''
-    get reserved resource for instantiating reservation
-    :param vnfd_flavor_id: flavour id
-    :param number_vnfs: number of vnfs in a reservation
-    :return: reserved resources (dict)
-    '''
+        get reserved resource for instantiating reservation
+        :param vnfd_flavor_id: flavour id
+        :param number_vnfs: number of vnfs in a reservation
+        :return: reserved resources (dict)
+        '''
 
     # get flavour info from flavour_info table
     resources = get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
@@ -639,7 +648,8 @@ def loading_reserved_quota_by_flavourId(nfvodb, vnfd_flavor_id, number_vnfs):
         nlog.error("ERROR: number of vnfs is not defined yet :[number of vnfs = '%s']", number_vnfs)
         return False
 
-def loading_allocated_quota_by_flavourId(nfvodb, vnfd_flavor_id):
+
+def loading_allocated_quota_by_flavour_id(nfvodb, vnfd_flavor_id):
     '''
     get allocated resources that required when NFVO send resource allocation message to VIM
     :param nfvodb:
@@ -651,6 +661,7 @@ def loading_allocated_quota_by_flavourId(nfvodb, vnfd_flavor_id):
     allocated = get_flavour_from_flavour_info_table(nfvodb, vnfd_flavor_id)
 
     return allocated
+
 
 def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
     '''
@@ -722,123 +733,12 @@ class DbQuotaDriver(object):
 
         db_api.reservation_expire(context)
 
-def quota_reserve(nfvodb, resources, quotas, deltas, expire,
-                  until_refresh, max_age, project_id=None):
-    elevated = context.elevated()
-    with context.session.begin():
-        if project_id is None:
-            project_id = context.project_id
 
-        # Get the current usages
-        usages = _get_quota_usages(context, context.session, project_id)
-
-        # Handle usage refresh
-        refresh = False
-        work = set(deltas.keys())
-        while work:
-            resource = work.pop()
-
-            # Do we need to refresh the usage?
-            if resource not in usages:
-                usages[resource] = re_quota_usage_create(elevated,
-                                                       project_id,
-                                                       resource,
-                                                       0, 0,
-                                                       until_refresh or None,
-                                                       session=context.session)
-                refresh = True
-            elif usages[resource].in_use < 0:
-                # Negative in_use count indicates a desync, so try to
-                # heal from that...
-                refresh = True
-            elif usages[resource].until_refresh is not None:
-                usages[resource].until_refresh -= 1
-                if usages[resource].until_refresh <= 0:
-                    refresh = True
-            elif max_age and usages[resource].updated_at is not None and (
-                (usages[resource].updated_at -
-                    timeutils.utcnow()).seconds >= max_age):
-                refresh = True
-
-            if refresh:
-                # no actual usage refresh here
-
-                # refresh from the bottom pod
-                usages[resource].until_refresh = until_refresh or None
-
-                # Because more than one resource may be refreshed
-                # by the call to the sync routine, and we don't
-                # want to double-sync, we make sure all refreshed
-                # resources are dropped from the work set.
-                work.discard(resource)
-
-                # NOTE: We make the assumption that the sync
-                #            routine actually refreshes the
-                #            resources that it is the sync routine
-                #            for.  We don't check, because this is
-                #            a best-effort mechanism.
-
-        # Check for deltas that would go negative
-        unders = [r for r, delta in deltas.items()
-                  if delta < 0 and delta + usages[r].in_use < 0]
-
-        # Now, let's check the quotas
-        # NOTE: We're only concerned about positive increments.
-        #            If a project has gone over quota, we want them to
-        #            be able to reduce their usage without any
-        #            problems.
-        overs = [r for r, delta in deltas.items()
-                 if quotas[r] >= 0 and delta >= 0 and
-                 quotas[r] < delta + usages[r].in_use + usages[r].reserved]
-
-        # NOTE: The quota check needs to be in the transaction,
-        #            but the transaction doesn't fail just because
-        #            we're over quota, so the OverQuota raise is
-        #            outside the transaction.  If we did the raise
-        #            here, our usage updates would be discarded, but
-        #            they're not invalidated by being over-quota.
-
-        # Create the reservations
-        if not overs:
-            reservations = []
-            for resource, delta in deltas.items():
-                reservation = _reservation_create(elevated,
-                                                  str(uuid.uuid4()),
-                                                  usages[resource],
-                                                  project_id,
-                                                  resource, delta, expire,
-                                                  session=context.session)
-                reservations.append(reservation.uuid)
-
-                # Also update the reserved quantity
-                # NOTE: Again, we are only concerned here about
-                #            positive increments.  Here, though, we're
-                #            worried about the following scenario:
-                #
-                #            1) User initiates resize down.
-                #            2) User allocates a new instance.
-                #            3) Resize down fails or is reverted.
-                #            4) User is now over quota.
-                #
-                #            To prevent this, we only update the
-                #            reserved value if the delta is positive.
-                if delta > 0:
-                    usages[resource].reserved += delta
-
-    if unders:
-        LOG.warning(_LW("Change will make usage less than 0 for the following "
-                        "resources: %s"), unders)
-    if overs:
-        usages = {k: dict(in_use=v['in_use'], reserved=v['reserved'])
-                  for k, v in usages.items()}
-        raise exceptions.OverQuota(overs=sorted(overs), quotas=quotas,
-                                   usages=usages)
-
-    return reservations
 
 
 def reserve(nfvodb, resources, deltas, expire=None,
             project_id=None):
+    # reserve() will invoke reservation_create() to reserve resources and make reservations
     """Check quotas and reserve resources.
 
     For counting quotas--those quotas for which there is a usage
@@ -901,10 +801,83 @@ def reserve(nfvodb, resources, deltas, expire=None,
     #            which means access to the session.  Since the
     #            session isn't available outside the DBAPI, we
     #            have to do the work there.
-    return db_api.quota_reserve(context, resources, quotas, deltas,
-                                expire, CONF.quota.until_refresh,
-                                CONF.quota.max_age,
-                                project_id=project_id)
+    return db_api.reservation_create(context, resources, quotas, deltas,
+                                     expire, CONF.quota.until_refresh,
+                                     CONF.quota.max_age,
+                                     project_id=project_id)
+
+
+class AllQuotaEngine(QuotaEngine):
+    """Represent the set of all quotas."""
+
+    @property
+    def resources(self):
+        """Fetches all possible quota resources."""
+
+        result = {}
+
+        # Global quotas.
+        # Set sync_func to None for no sync function in Tricircle
+        reservable_argses = [
+
+            ('instances', None, 'quota_instances'),
+            ('cores', None, 'quota_cores'),
+            ('ram', None, 'quota_ram'),
+            ('security_groups', None, 'quota_security_groups'),
+            ('floating_ips', None, 'quota_floating_ips'),
+            ('fixed_ips', None, 'quota_fixed_ips'),
+            ('server_groups', None, 'quota_server_groups'),
+
+
+            ('volumes', None, 'quota_volumes'),
+            ('per_volume_gigabytes', None, 'per_volume_size_limit'),
+            ('snapshots', None, 'quota_snapshots'),
+            ('gigabytes', None, 'quota_gigabytes'),
+            ('backups', None, 'quota_backups'),
+            ('backup_gigabytes', None, 'quota_backup_gigabytes'),
+            ('consistencygroups', None, 'quota_consistencygroups')
+        ]
+
+        absolute_argses = [
+            ('metadata_items', 'quota_metadata_items'),
+            ('injected_files', 'quota_injected_files'),
+            ('injected_file_content_bytes',
+             'quota_injected_file_content_bytes'),
+            ('injected_file_path_bytes',
+             'quota_injected_file_path_length'),
+        ]
+
+        # TODO(joehuang), for countable, the count should be the
+        # value in the db but not 0 here
+        countable_argses = [
+            ('security_group_rules', None, 'quota_security_group_rules'),
+            ('key_pairs', None, 'quota_key_pairs'),
+            ('server_group_members', None, 'quota_server_group_members'),
+        ]
+
+        for args in reservable_argses:
+            resource = ReservableResource(*args)
+            result[resource.name] = resource
+
+        for args in absolute_argses:
+            resource = AbsoluteResource(*args)
+            result[resource.name] = resource
+
+        for args in countable_argses:
+            resource = CountableResource(*args)
+            result[resource.name] = resource
+
+        return result
+
+    def register_resource(self, resource):
+        raise NotImplementedError(_("Cannot register resource"))
+
+    def register_resources(self, resources):
+        raise NotImplementedError(_("Cannot register resources"))
+
+# get all defined resources
+QUOTAS = AllQuotaEngine()
+
 
 # get number of vnfs in a reservation dict
 # return a dict of reserved quota  after calculating with below formula:
@@ -976,7 +949,7 @@ if __name__ == "__main__":
 
     #
     # try:
-    #     nfvodb = resource_db()
+    #     nfvodb = Resource_db()
     #     if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
     #         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
     #         exit(-1)

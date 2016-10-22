@@ -1,4 +1,4 @@
-
+import collections
 import itertools
 import six
 
@@ -7,12 +7,13 @@ from rm_mano.common import exceptions
 from rm_mano.rm_monitor.sh_rm_monitoring import *
 from rm_mano.global_info import *
 
-# to do validate the quota limits
 def validate_resource_by_name(resource):
+    # to do validate the quota limits
     if resource not in itertools.chain(consts.CINDER_QUOTA_FIELDS,
-                                   consts.NOVA_QUOTA_FIELDS,
-                                   consts.NEUTRON_QUOTA_FIELDS):
+                                       consts.NOVA_QUOTA_FIELDS,
+                                       consts.NEUTRON_QUOTA_FIELDS):
         raise exceptions.InvalidInputError
+
 
 def validate_quota_limits(payload):
     for resource in payload:
@@ -25,28 +26,6 @@ def validate_quota_limits(payload):
         # TODO (ricky) implement constrains for input data
         # if isinstance(payload, dict) and (not isinstance(payload[resource], int) or payload[resource] <= 0):
         #     raise exceptions.InvalidInputError
-
-def load_flavors_from_vim(flavor_id):
-    '''
-    loading flavor details directly from vim (openstack)
-    :param flavor_id:
-    :return: a dict - all details about required resources for that flavor
-    '''
-    nova_client = get_nova_client('admin')
-    flavor_list = nova_client.flavors.list(detailed=True)
-    flavor_details = {}
-
-    for flavor in flavor_list:
-        if int(flavor.id) == int(flavor_id):
-            # flavor_details['name'] = flavor.name
-            # flavor_details['uuid'] = flavor.id
-            flavor_details['vcpus'] = flavor.vcpus
-            flavor_details['vmemory'] = flavor.ram
-            flavor_details['gigabytes'] = flavor.disk
-            return flavor_details
-        else:
-            print "flavor %s is not existing in VIM (Openstack)" % flavor_id
-            return False
 
 
 def build_db_quota_limit(quotas):
@@ -67,6 +46,7 @@ def build_db_quota_limit(quotas):
         quota[resource]['allocated'] = 0
     print quota
     return quota
+
 
 def build_db_usage_limit(resources, label_update):
     '''
@@ -98,12 +78,13 @@ def build_db_usage_limit(resources, label_update):
     print usage
     return usage
 
-# convert quotas limit from db format to output format that will be response to api request
-# input quotas (db format):
-# quotas_db = {'uuid': '1234dsd', 'project_id': 'af10gh', 'resource': 'vcpus', 'hard_limit': 10}
-#
-# desired output format for quotas = {'vcpus': 8, 'vnfs': 10}
+
 def build_output_quota_limit(db_quotas):
+    # convert quotas limit from db format to output format that will be response to api request
+    # input quotas (db format):
+    # quotas_db = {'uuid': '1234dsd', 'project_id': 'af10gh', 'resource': 'vcpus', 'hard_limit': 10}
+    #
+    # desired output format for quotas = {'vcpus': 8, 'vnfs': 10}
     out_quotas = {}
     k = db_quotas['resource']
     v = db_quotas['hard_limit']
@@ -111,12 +92,14 @@ def build_output_quota_limit(db_quotas):
     # out_quotas['project_id'] = db_quotas['project_id']
     return out_quotas
 
-# db_resource_usage= {'deleted_at': None, 'resource': 'port', 'uuid': '8b36d48f-903d-11e6-b184-0050568b49a9',
-# 'user_id': None, 'created_at': None, 'in_use': 0L, 'updated_at': datetime.datetime(2016, 10, 12, 14, 13, 14),
-# 'until_refresh': 0, 'reserved': 0L, 'project_id': '25970fbcfb0a4c2fb42ccc18f1bccde3'}
-#
-# convert from db format to output format for api request
+
 def build_output_resource_usage(db_resource_usage):
+    # db_resource_usage= {'deleted_at': None, 'resource': 'port', 'uuid': '8b36d48f-903d-11e6-b184-0050568b49a9',
+    # 'user_id': None, 'created_at': None, 'in_use': 0L, 'updated_at': datetime.datetime(2016, 10, 12, 14, 13, 14),
+    # 'until_refresh': 0, 'reserved': 0L, 'project_id': '25970fbcfb0a4c2fb42ccc18f1bccde3'}
+    #
+    # convert from db format to output format for api request
+    #
     # get resource name
     resource = db_resource_usage['resource']
 
@@ -134,10 +117,12 @@ def build_output_resource_usage(db_resource_usage):
 
     return out_usage
 
-# convert to quota name that is used at vim (openstack)
-# because some quotas are renamed from original name (at vim)
-# such as: vcpu-cores ; ram-vmemory; vnfs-instances
+
 def build_visible_quota_at_vim(quota_set):
+    # convert to quota name that is used at vim (openstack)
+    # because some quotas are renamed from original name (at vim)
+    # such as: vcpu-cores ; ram-vmemory; vnfs-instances
+    #
     # quota_set: dict-with key as resource name and value as value of resource (integer)
     quota_map = [
         # compute quota
@@ -146,7 +131,7 @@ def build_visible_quota_at_vim(quota_set):
         'injected_file_content_bytes', 'security_groups', 'security_group_rules',
         'server_groups', 'server_group_members'
         # cinder quota
-        "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
+                         "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
         # neutron quota
         "network", "subnet", "port", "router", "floatingip", "security_group", "security_group_rule"]
 
@@ -164,11 +149,14 @@ def build_visible_quota_at_vim(quota_set):
                     ret[key_vim] = v
     return ret
 
-# mapping resources that are got from vim (openstack) to resource that are renamed to use at nfvo db
-# because some resource are renamed from original name (at vim)
-# such as: vcpu-cores ; ram-vmemory; vnfs-instances
+
 def build_visible_resources_at_nfvo(vim_resources):
+    # mapping resources that are got from vim (openstack) to resource that are renamed to use at nfvo db
+    # because some resource are renamed from original name (at vim)
+    # such as: vcpu-cores ; ram-vmemory; vnfs-instances
+    #
     # resources: dict-with key as resource name and value as integer from vim
+
     resources_map = [
         # compute quota
         "metadata_items", "vcpus", "vnfs", "vmemory", "key_pairs",
@@ -176,7 +164,7 @@ def build_visible_resources_at_nfvo(vim_resources):
         'injected_file_content_bytes', 'security_groups', 'security_group_rules',
         'server_groups', 'server_group_members'
         # cinder quota
-        "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
+                         "volumes", "snapshots", "gigabytes", "backups", "backup_gigabytes",
         # neutron quota
         "network", "subnet", "port", "router", "floatingip", "security_group", "security_group_rule"]
 
@@ -194,15 +182,16 @@ def build_visible_resources_at_nfvo(vim_resources):
                     ret[key_vim] = v
     return ret
 
-# to calculate resource whether resource usage is increased or decreased
+
 def resource_calculation(current_value, acquired_value, action):
+    # to calculate resource whether resource usage is increased or decreased
     '''
-    to calculate resource whether resource usage is increased or decreased
-    :param current_value: current value that is being stored in db
-    :param acquired_value: required resource value that needed to be increased or decreased
-    :param action: (string) (ADD,UPDATE,DELETE, SYNC)
-    :return:
-    '''
+        to calculate resource whether resource usage is increased or decreased
+        :param current_value: current value that is being stored in db
+        :param acquired_value: required resource value that needed to be increased or decreased
+        :param action: (string) (ADD,UPDATE,DELETE, SYNC)
+        :return:
+        '''
 
     if action == 'ADD' or action == 'UPDATE':
         cal_usage = current_value + acquired_value
@@ -230,14 +219,14 @@ def resource_calculation(current_value, acquired_value, action):
         nlog.error("ERROR: utils_rm.resource_calculation() - Failed to calculate resource usage")
         return False, None
 
+
 #
 # currently Un-used code
 #################################
 
-# Returns a iterator of tuples containing batch_size number of objects in each
-
 
 def get_batch_projects(batch_size, project_list, fillvalue=None):
+    # Returns a iterator of tuples containing batch_size number of objects in each
     # look at this link to see what happened
     # http://stackoverflow.com/questions/28847334/how-to-unserstand-the-code-using-izip-longest-to-chunk-a-list
     args = [iter(project_list)] * batch_size
@@ -288,3 +277,86 @@ def build_used_limits(quotas):
 
     return used_limits
 
+
+#
+# added 2016-10-16
+#
+
+
+def validate_required_fields_set(body, fields):
+    for field in fields:
+        if field not in body:
+            return False
+    return True
+
+
+TRUE_STRINGS = ('1', 't', 'true', 'on', 'y', 'yes')
+FALSE_STRINGS = ('0', 'f', 'false', 'off', 'n', 'no')
+
+
+def is_valid_boolstr(val):
+    """Check if the provided string is a valid bool string or not."""
+    val = str(val).lower()
+    return (val in TRUE_STRINGS) or (val in FALSE_STRINGS)
+
+
+def bool_from_string(subject, strict=False, default=False):
+    """Interpret a string as a boolean.
+
+    A case-insensitive match is performed such that strings matching 't',
+    'true', 'on', 'y', 'yes', or '1' are considered True and, when
+    `strict=False`, anything else returns the value specified by 'default'.
+    Useful for JSON-decoded stuff and config file parsing.
+    If `strict=True`, unrecognized values, including None, will raise a
+    ValueError which is useful when parsing values passed in from an API call.
+    Strings yielding False are 'f', 'false', 'off', 'n', 'no', or '0'.
+    """
+
+    if not isinstance(subject, six.string_types):
+        subject = six.text_type(subject)
+
+    lowered = subject.strip().lower()
+
+    if lowered in TRUE_STRINGS:
+        return True
+    elif lowered in FALSE_STRINGS:
+        return False
+    elif strict:
+        acceptable = ', '.join(
+            "'%s'" % s for s in sorted(TRUE_STRINGS + FALSE_STRINGS))
+        msg = _("Unrecognized value '%(val)s', acceptable values are:"
+                " %(acceptable)s") % {'val': subject,
+                                      'acceptable': acceptable}
+        raise ValueError(msg)
+    else:
+        return default
+
+
+def check_string_length(value, name=None, min_len=0, max_len=None):
+    """Check the length of specified string
+
+    :param value: the value of the string
+    :param name: the name of the string
+    :param min_len: the minimum length of the string
+    :param max_len: the maximum length of the string
+
+    """
+    if not isinstance(value, six.string_types):
+        if name is None:
+            msg = rmlog.error("The input is not a string or unicode")
+        else:
+            msg = rmlog.error("%s is not a string or unicode") % name
+        raise exceptions.InvalidInput(message=msg)
+
+    if name is None:
+        name = value
+
+    if len(value) < min_len:
+        msg = rmlog.error("%(name)s has a minimum character requirement of "
+                "%(min_length)s.") % {'name': name, 'min_length': min_len}
+        raise exceptions.InvalidInput(message=msg)
+
+    if max_len and len(value) > max_len:
+        msg = rmlog.error("%(name)s has more than %(max_length)s "
+                "characters.") % {'name': name, 'max_length': max_len}
+        raise exceptions.InvalidInput(message=msg)

@@ -127,3 +127,25 @@ class NovaClient(base.DriverBase):
 
         return cnt_inst_flavor_distribution
 
+
+    def load_flavors_from_vim(self, flavor_id):
+        '''
+        loading flavor details directly from vim (openstack)
+        :param flavor_id:
+        :return: a dict - all details about required resources for that flavor
+        '''
+
+        flavor_list = self.nova_client.flavors.list(detailed=True)
+        flavor_details = {}
+
+        for flavor in flavor_list:
+            if int(flavor.id) == int(flavor_id):
+                # flavor_details['name'] = flavor.name
+                # flavor_details['uuid'] = flavor.id
+                flavor_details['vcpus'] = flavor.vcpus
+                flavor_details['vmemory'] = flavor.ram
+                flavor_details['gigabytes'] = flavor.disk
+                return flavor_details
+            else:
+                print "flavor %s is not existing in VIM (Openstack)" % flavor_id
+                return False
