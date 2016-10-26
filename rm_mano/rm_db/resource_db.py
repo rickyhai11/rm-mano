@@ -315,7 +315,8 @@ class Resource_db(utils_db):
     # unused code
     # def replace_reservation_by_rsv_id(self, table_name, reservation_id, new_values_dict):
     #     '''
-    #     Removes the old (based on reservation_id) and adds a new reservation with new values (new reservation is created as well)
+    #     Removes the old (based on reservation_id) and adds a new reservation with new values
+    #     (new reservation is created as well)
     #     Attribute
     #     :param table_name: table where to insert
     #     :param old_reservation:
@@ -347,8 +348,10 @@ class Resource_db(utils_db):
     #         except (mdb.Error, AttributeError), e:
     #             print "Resource_db.replace_row_by_uuid_composite DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    # update reservation for a given project
     def update_reservation_for_project(self, project_id, reservation_id, new_values_dict):
+        # update reservation for a given project
+        # TODO (rickyhai) update only when reservation status is  ='INACTIVE'
+        # that means reservation is not started yet
         '''
         update reservation with reservation id and project id
         :param project_id: project where reservation is created
@@ -356,27 +359,26 @@ class Resource_db(utils_db):
         :param new_values_dict: is a dictionary with key/value for update fields
         :return:
         '''
+
         where = {'project_id': project_id, 'reservation_id': reservation_id}
         _, result = self.update_rows('quota_rm', UPDATE=new_values_dict, WHERE=where, log=False)
 
         # result is tuple and result[0] to pickup number of updated rows
         if result[0] <= 0:
             # debug only
-            print "Resource_db.update_reservation_for_project:  Failed to update reservation with (update values: '%s' " \
-                  "and tenant ID: '%s'" % (new_values_dict, project_id)
+            print "Resource_db.update_reservation_for_project:  Failed to update reservation with " \
+                  "(update values: '%s' and tenant ID: '%s'" % (new_values_dict, project_id)
 
             nlog.error("Error : can't update reservation for (update values ='%s' and tenant ID: '%s')",
                        new_values_dict, project_id)
             return False, None
         else:
             # debug only
-            print "Resource_db.update_reservation_for_project:  Sucessful to update reservation with (update values: '%s' " \
-                  "and tenant ID: '%s'" % (new_values_dict, project_id)
-            nlog.info("Success : update reservation for a tenant/project ID '%s' and update values: '%s'", project_id, new_values_dict)
+            print "Resource_db.update_reservation_for_project:  Successful to update reservation with " \
+                  "(update values: '%s' and tenant ID: '%s'" % (new_values_dict, project_id)
+            nlog.info("Success : update reservation for a tenant/project ID '%s' and update values: '%s'",
+                      project_id, new_values_dict)
             return True, result[0]
-
-
-
 
 
     # vnfTid (vnf_id) DB operations that related to reservation, go here!
@@ -384,22 +386,18 @@ class Resource_db(utils_db):
     # AFTER RESERVATION HAS BEEN STARTED ALREADY AND VNF(S) HAVE BEEN SUCCESSFULLY INSTANTIATED AT VIM
     ###################################################
 
-   need to modify here
-
     def add_vnf_id_and_rsv_id(self, table, reservation_id, vnf_id=None):
+        # TODO (ricky) modify to invoke add vnf_id along with reservation id into vnf_rsv_rm table only
+        # when reservation has been active already and vnfs are instantiated successfully at VIM
+
         # call this function when
-        # 1. reservation for number of 'vnfs' is created successfully but vnf(s) is/are NOT instantiated yet at VIM
-        # Call this function with vnf_id is None to add only reservation id into 'rsv_vnf_rm' table and leave vnf_id as null
-        #
-        #  2. when vnfs are/is confirmed that created successfully at vim vnf_id should be updated
-        # by using update_vnf_id_by_rsv_id()
+        # when vnfs are/is confirmed that created successfully at vim , then vnf_id and rsv_id should be updated
 
         '''
-        to add list of vnf_id from a reservation to table 'rsv_vnf_rm'
-        :param talble name: name of table
+        to add vnf_id and rsv_id into table 'rsv_vnf_rm'
+        :param table: name of table
         :param reservation_id: existing reservation in DB
-        :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
-        triggered, reservation status "Running" and vnf_id(s) has been instantiated
+        :param vnf_id = instance_id,
         :return: result and vnf_id
         '''
         for retry_ in range(0, 2):
@@ -416,56 +414,44 @@ class Resource_db(utils_db):
             except (mdb.Error, AttributeError), e:
                 print "Resource_db.update_vnf_id_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
-    # call this function when a reservation ('vnfs' resource is reserved) has already started
-    # and vnfs are already instantiated successfully
-    # then need to update vnf_id into vnf_rsv_rm table with corresponding reservation which was added already previously
-    # (at the time reservation was created in reservation table)
+    # consider to remove this function
     #
-    # notice one reservation could be associated with more than one vnf_id(s) in case a number of vnfs within project
-    # are reserved for future use
-
-
-   need to modify here
-
-    def update_vnf_id_by_rsv_id(self, table, reservation_id, vnf_id):
-        '''
-        to update list of vnf_id from a reservation to table 'rsv_vnf_rm'
-        :param talble: name of table
-        :param reservation_id: esxting reservation in DB
-        :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
-        triggered, reservation status "Running" and vnf_id(s) has been instantiated
-        :return: result and vnf_id
-        '''
-
-        # first check if record with only reservation_id is filled is present in db
-        result, row = self.get_row_by_vnf_id_rsv_id(reservation_id=reservation_id, vnf_id=None)
-
-        if result <= 0:
-            nlog.error("ERROR: Could not be found appropriate record in vnf_rsv_rm table with "
-                       "reservation id: %s and vnf_id: %s", reservation_id, None)
-            return False, None
-
-        # to handle the case one reservation that associated with more than one vnfs
-        # (reserved amount of vnfs)
-        elif result > 1:
-
-
-        for retry_ in range(0,2):
-            try:
-                with self.con:
-                    self.cur= self.con.cursor()
-                    sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s' AND vnf_id = '%s' " \
-                          % (table, new_vnf_id, reservation_id, vnf_id)
-                    print sql
-                    self.cur.execute(sql)
-                    updated = self.cur.rowcount
-                    print "Updated vnf_id: %s successfully for %s reservation" % (vnf_id, updated)
-                return updated, vnf_id
-            except (mdb.Error, AttributeError), e:
-                print "Resource_db.update_vnf_id_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
-
-
-   need to modify here
+    # def update_vnf_id_by_rsv_id(self, table, reservation_id, vnf_id):
+    #     '''
+    #     to update list of vnf_id from a reservation to table 'rsv_vnf_rm'
+    #     :param talble: name of table
+    #     :param reservation_id: esxting reservation in DB
+    #     :param vnf_id = instance_id, in this case this field need to be updated after starting time has been
+    #     triggered, reservation status "Running" and vnf_id(s) has been instantiated
+    #     :return: result and vnf_id
+    #     '''
+    #
+    #     # first check if record with only reservation_id is filled is present in db
+    #     result, row = self.get_row_by_vnf_id_rsv_id(reservation_id=reservation_id, vnf_id=None)
+    #
+    #     if result <= 0:
+    #         nlog.error("ERROR: Could not be found appropriate record in vnf_rsv_rm table with "
+    #                    "reservation id: %s and vnf_id: %s", reservation_id, None)
+    #         return False, None
+    #
+    #     # to handle the case one reservation that associated with more than one vnfs
+    #     # (reserved amount of vnfs)
+    #     elif result > 1:
+    #
+    #
+    #     for retry_ in range(0,2):
+    #         try:
+    #             with self.con:
+    #                 self.cur= self.con.cursor()
+    #                 sql = "UPDATE %s SET vnf_id='%s' WHERE reservation_id = '%s' AND vnf_id = '%s' " \
+    #                       % (table, vnf_id, reservation_id, vnf_id)
+    #                 print sql
+    #                 self.cur.execute(sql)
+    #                 updated = self.cur.rowcount
+    #                 print "Updated vnf_id: %s successfully for %s reservation" % (vnf_id, updated)
+    #             return updated, vnf_id
+    #         except (mdb.Error, AttributeError), e:
+    #             print "Resource_db.update_vnf_id_by_rsv_id DB Exception %d : %s" % (e.args[0], e.args[1])
 
     def _get_row_by_vnf_id_rsv_id(self, reservation_id, vnf_id):
         '''
@@ -487,8 +473,6 @@ class Resource_db(utils_db):
                 r, c = self.format_error(e)
                 if r!=-HTTP_Request_Timeout or retry_ == 1:
                     return r, c
-
-   need to modify here
 
     def get_row_by_vnf_id_rsv_id(self, reservation_id, vnf_id):
         return self._get_row_by_vnf_id_rsv_id(reservation_id, vnf_id)
@@ -562,7 +546,7 @@ class Resource_db(utils_db):
         # call this function when updating vnfdId for a reservation by reservation_id
         # vnfdId should be updated accordingly to associated table 'vnfdid_rsv_info'
 
-        # TODO (rickyhai) update only  when reservation status is  ='INACTIVE'
+        # TODO (rickyhai) update only when reservation status is  ='INACTIVE'
         # that means reservation is not started yet
         '''
         to update list of vnf_id from a reservation to table 'rsv_vnf_auth_rm'
@@ -656,14 +640,6 @@ class Resource_db(utils_db):
         #TODO (ricky) implement later in next phase
         return rsv_id
 
-
-
-
-
-
-
-
-
     # Quota Management DB operations, go here
     #####################################################
 
@@ -714,10 +690,10 @@ class Resource_db(utils_db):
             return False, None
         # if number of rows is not integer
         else:
-            print ("ERROR: Failed to check the presence of a specific resource(resource name: '%s' and project ID '%s') "
-                   "from resource usage table" % (resource, tenant_id))
-            nlog.error("ERROR: Failed to check the presence of a specific resource(resource name: '%s' and project ID '%s') "
-                       "from resource usage table", resource, tenant_id)
+            print ("ERROR: Failed to check the presence of a specific resource "
+                   "(resource name: '%s' and project ID '%s') from resource usage table" % (resource, tenant_id))
+            nlog.error("ERROR: Failed to check the presence of a specific resource"
+                       "(resource name: '%s' and project ID '%s') from resource usage table", resource, tenant_id)
             return False, None
 
     # # update a specific resource usage in a given project/tenant by name + using dict actual_usage as input data
@@ -764,7 +740,8 @@ class Resource_db(utils_db):
         '''
         # use cases (1) or (2):
         # (1) to update DB after manually calculating resource usage ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (until_refresh = number of seconds that resources will be synced)
+        # (2) to update DB after resource usage sync from VIM (until_refresh = number of seconds
+        # that resources will be synced)
         #
         # First check if there are any duplicate rows with corresponding project id and resource in db
         nb_rows, usage = self._get_resource_by_uuid_name_for_tenant('resource_usage_rm', tenant_id=tenant_id,
@@ -832,7 +809,8 @@ class Resource_db(utils_db):
 
         # use cases (1) or (2):
         # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds when resource will be synced with vim )
+        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds
+        # when resource will be synced with vim )
         #
         # First get current resource usage and
         # check if there are any duplicate rows with corresponding project id and resource in db
@@ -915,8 +893,9 @@ class Resource_db(utils_db):
 
         # use cases (1) or (2):
         # (1) to update DB after calculating reserved/allocated resource ( with per resource request)
-        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds when resources will be synced with vim
-        #     details related when resource will be synced is described in reservation_create() function)
+        # (2) to update DB after resource usage sync from VIM (until_refresh (integer) number of seconds
+        # when resources will be synced with vim
+        # the details-related when resource will be synced is described in reservation_create() function)
         #
         # First get current resource usage and
         # check if there are any duplicate rows with corresponding project id and resource in db

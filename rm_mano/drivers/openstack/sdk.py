@@ -186,8 +186,6 @@ class OpenStackDriver(object):
 
         return flavors_all_projects
 
-
-
     def load_flavors_from_vim(self, flavor_id):
         '''
         loading flavor details directly from vim (openstack)
@@ -195,7 +193,6 @@ class OpenStackDriver(object):
         :return: a dict - all details about required resources for that flavor
         '''
         return self.nova_client.load_flavors_from_vim(flavor_id)
-
 
 
 if __name__ == "__main__":

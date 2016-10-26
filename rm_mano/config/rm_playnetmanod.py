@@ -8,25 +8,29 @@ global_config = {'db_host': '116.89.184.43',
                   'db_name': 'rm_mano_v1'
                  }
 global data
-data = {'reservation_id': '5555',
-        'label': 'test4',
-        'host_id': "cfcb18eef55b4b03bb075ea106fe771f",
-        'host_name': 'hai_compute',
-        'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
-        'user_name': 'demo',
-        'tenant_id': '4a766494021447c7905b81adae050a97',
-        'tenant_name': 'demo',
-        'start_time': '2016-07-09 18:04:00',
-        'end_time': '2016-07-09 18:09:00',
-        'flavor_id': 1,
-        'image_id': '68e9fa2a-afa2-4e32-8598-35cea0f704fa',
-        'network_id': '2d54f36a-8569-4a71-806c-f563a9aa6367',
-        'number_vnfs': '1',
-        'ns_id': 'cfcb18eef55b4b03bb075ea106fe771f',
-        'status': 'ACTIVE',
-        'summary': 'reservation testing'
-        }
+data = {}  # TODO (ricky) data dictionary shoul follow below format
 
+'''
+Table: reservation
+Columns:
+reservation_id int(36) AI PK
+uuid varchar(36)
+usage_id varchar(36)
+label varchar(100)
+region_id varchar(36)
+user_id varchar(36)
+project_id varchar(36)
+resource varchar(36)
+delta int(20)
+start_time datetime
+end_time datetime
+expire datetime
+status enum('ACTIVE','INACTIVE','BUILD','ERROR')
+created_at datetime
+updated_at datetime
+deleted_at datetime
+summary varchar(300)
+'''
 
 if __name__ == "__main__":
 

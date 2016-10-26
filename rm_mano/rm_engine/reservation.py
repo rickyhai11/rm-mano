@@ -55,6 +55,10 @@ class Reservation():
 
     def create_reservation(self, nfvodb, deltas, expire, start_time, end_time,
                            until_refresh, project_id, vnfd_id=None):
+        # vnfd_id: (optional field) by default should be None, only have value when a reservation
+        # that would like to reserve number of vnfs
+        # then vnfd_id will be used as template for instantiation of vnf(s) at vim
+        # notes that with other resource like vcpus, vmemmory or gigabytes... vnfd_id is not required
 
         # Set up the reservation expiration
         if expire is None:
@@ -73,12 +77,12 @@ class Reservation():
                                                       until_refresh, project_id, vnfd_id, None)
         return reservation_uuids
 
-
-
-
-
-
-
+    #############################################################################
+    #
+    #
+    # TODO(ricky) need to continue refactoring from here to the end of this file
+    #
+    #############################################################################
 
     def delete_reservation(self, table, nfvodb, reservation_id):
         result = nfvodb.delete_row_by_rsv_id(table=table, reservation_id=reservation_id)

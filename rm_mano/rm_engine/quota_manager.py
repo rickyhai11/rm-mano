@@ -677,8 +677,8 @@ def get_vnfdUsingCnt_for_project(nfvodb, vnfd_id, action):
 
 #
 #
-# wish-list in the future
-########################################
+# wish-list in the future- IGNORE THESE CODES BELOW PLS !
+#########################################################
 #
 
 
@@ -919,43 +919,4 @@ if __name__ == "__main__":
     region_new_limit = {'nova':{"cores": 80,"ram": 102400, "metadata_items": 800,"key_pairs": 800},'cinder':{"volumes": 80,"snapshots": 80, "gigabytes": 800,"backups": 800},'neutron':{"network":80,"port": 80,"router": 80}}
     quota_manager = VimQuotaManager()
     quota_manager.update_quota_limits(project_id='f4211c8eee044bfb9dea2050fef2ace5', region_new_limit=region_new_limit, current_region='RegionOne')
-    quota_manager.get_region_for_project('f4211c8eee044bfb9dea2050fef2ace5')
 
-    # reservation and resource check test
-    data = {'reservation_id': '22222',
-            'label': 'test4',
-            'host_id': "12212817268DJKHSAJD",
-            'host_name': 'hai_compute',
-            'user_id': 'ffbc3c72aa9f44769f3430093c59c457',
-            'user_name': 'admin',
-            'tenant_id': '4a766494021447c7905b81adae050a97',
-            'tenant_name': 'demo',
-            'start_time': '2016-05-23 18:04:00',
-            'end_time': '2016-05-23 18:09:00',
-            'flavor_id': 1,
-            'image_id': 'bf9d2214-4032-4b0a-8588-0fb73fc7d57c',
-            'network_id': 'f61491df-3ad8-4ac4-9974-6b6ea27bf5f0',
-            'number_vnfs': 2,
-            'ns_id': 'ffbc3c72aa9f44769f3430093c59c457',
-            'status': 'ACTIVE',
-            'summary': 'reservation testing'
-            }
-
-    flavor_details = {'vcpus': 1, 'memory': 512, 'gigabytes': 1}
-    # test get reserved quota from flavour
-    reserved = quota_reserved_by_flavor_vnfcount(data)
-    print reserved
-
-
-    #
-    # try:
-    #     nfvodb = Resource_db()
-    #     if nfvodb.connect(global_config['db_host'], global_config['db_user'], global_config['db_passwd'], global_config['db_name']) == -1:
-    #         print "Error connecting to database", global_config['db_name'], "at", global_config['db_user'], "@", global_config['db_host']
-    #         exit(-1)
-    #     # get_quotas_for_project(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5')
-    #     # update ={'in_use': 3}
-    #     # update_resource_usage_by_name(nfvodb, tenant_id='f4211c8eee044bfb9dea2050fef2ace5', resource='vnfs', actual_usage= 3)
-    #
-    # except (KeyboardInterrupt, SystemExit):
-    #     print 'Exiting Resource Management'
