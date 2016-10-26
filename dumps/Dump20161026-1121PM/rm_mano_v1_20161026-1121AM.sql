@@ -109,15 +109,6 @@ CREATE TABLE `quota_rm` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT COMMENT='quotas for all resources';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `quota_rm`
---
-
-LOCK TABLES `quota_rm` WRITE;
-/*!40000 ALTER TABLE `quota_rm` DISABLE KEYS */;
-INSERT INTO `quota_rm` VALUES ('27db278f-9513-11e6-9085-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','vmemory',5000,0,'0000-00-00 00:00:00','2016-10-18 11:58:23','0000-00-00 00:00:00'),('27dc600f-9513-11e6-b4c3-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','vnfs',15,0,'0000-00-00 00:00:00','2016-10-18 11:58:23','0000-00-00 00:00:00'),('27dcfc51-9513-11e6-acef-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','vcpus',15,0,'0000-00-00 00:00:00','2016-10-18 11:58:23','0000-00-00 00:00:00'),('27dd988f-9513-11e6-a39a-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','network',15,0,'0000-00-00 00:00:00','2016-10-18 11:58:23','0000-00-00 00:00:00'),('27de0dc0-9513-11e6-8f75-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3','port',15,0,'0000-00-00 00:00:00','2016-10-18 11:58:23','0000-00-00 00:00:00');
-/*!40000 ALTER TABLE `quota_rm` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `reservation`
@@ -151,14 +142,6 @@ CREATE TABLE `reservation` (
 ) ENGINE=InnoDB AUTO_INCREMENT=5556 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `reservation`
---
-
-LOCK TABLES `reservation` WRITE;
-/*!40000 ALTER TABLE `reservation` DISABLE KEYS */;
-/*!40000 ALTER TABLE `reservation` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `resource_usage_rm`
@@ -182,15 +165,6 @@ CREATE TABLE `resource_usage_rm` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT COMMENT='Resource Usage table';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `resource_usage_rm`
---
-
-LOCK TABLES `resource_usage_rm` WRITE;
-/*!40000 ALTER TABLE `resource_usage_rm` DISABLE KEYS */;
-INSERT INTO `resource_usage_rm` VALUES ('27dc11f0-9513-11e6-aa2b-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3',NULL,'vmemory',0,0,0,'0000-00-00 00:00:00','2016-10-18 08:51:55',NULL),('27dcae30-9513-11e6-a28e-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3',NULL,'vnfs',0,0,0,'0000-00-00 00:00:00','2016-10-18 08:51:55',NULL),('27dd4a70-9513-11e6-8160-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3',NULL,'vcpus',0,0,0,'0000-00-00 00:00:00','2016-10-18 08:51:55',NULL),('27dde6ae-9513-11e6-b770-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3',NULL,'network',0,0,0,'0000-00-00 00:00:00','2016-10-18 08:51:55',NULL),('27de82f0-9513-11e6-815a-0050568b49a9','25970fbcfb0a4c2fb42ccc18f1bccde3',NULL,'port',0,0,0,'0000-00-00 00:00:00','2016-10-18 08:51:55',NULL);
-/*!40000 ALTER TABLE `resource_usage_rm` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `vnf_rsv_rm`
@@ -206,14 +180,6 @@ CREATE TABLE `vnf_rsv_rm` (
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `vnf_rsv_rm`
---
-
-LOCK TABLES `vnf_rsv_rm` WRITE;
-/*!40000 ALTER TABLE `vnf_rsv_rm` DISABLE KEYS */;
-/*!40000 ALTER TABLE `vnf_rsv_rm` ENABLE KEYS */;
-UNLOCK TABLES;
 
 --
 -- Table structure for table `vnfdid_rsv_rm`
@@ -229,14 +195,6 @@ CREATE TABLE `vnfdid_rsv_rm` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT COMMENT='VNF Descriptor and reservation info';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Dumping data for table `vnfdid_rsv_rm`
---
-
-LOCK TABLES `vnfdid_rsv_rm` WRITE;
-/*!40000 ALTER TABLE `vnfdid_rsv_rm` DISABLE KEYS */;
-/*!40000 ALTER TABLE `vnfdid_rsv_rm` ENABLE KEYS */;
-UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
